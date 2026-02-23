@@ -1,0 +1,354 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## FRE 490 Spatial Data Analysis and Remote Sensing
+
+##### Instructor: Jonathan Proctor
+
+##### Teaching Assistant: Bhavita Ragoo
+
+##### About this lab:
+
+-   Due date Feb. 10th, 2025 at 9:30am.
+
+-   You may talk with other students about the lab, but each student is responsible for doing all exercises in the lab themselves and turning in their own write up. We will be checking code for evidence of copying and pasting.
+
+-   This is a newly developed assignment, so if you think there is an error or something is unclear, please let us know right away. That will be extremely helpful to us and your fellow students.
+
+-   Submit your lab as both LASTNAME.html and LASTNAME.Rmd on canvas. Please re-run the entire notebook, as needed, prior to submitting to make sure the results show the output from the existing code.
+
+-   Thanks to Solomon Hsiang for sharing materials this lab is based on.
+
+### Objectives:
+
+In this lab you will gain experience using interpolation methods and manipulating data using the raster package.
+
+### Setup
+
+Install and load necessary packages:
+
+```{r}
+#install.packages("raster")
+library(raster)
+library(sf)
+library(ggplot2)
+library(ggthemes)
+library(rnaturalearth)
+library(cowplot)
+#library(stargazer) only needed for optional sections
+```
+
+## 1. Int rp lati g pol ti n
+
+### 1.1.
+
+Your job is to estimate air pollution levels at various locations along a one-dimensional street. Houses on the street are spaced evenly at a grid-spacing of $\delta = 1$. The houses are numbered from $-5$ to $+5$ (the actual house numbers have been removed from the data set for privacy). You have only four pollution measurements
+
+$$\tilde{P} = \{(−4, 17.2), (−1, 3.4), (0, 2), (3, −1)\}$$
+
+where the first element in each observation is the house number and the second element is the pollution level.
+
+```{r}
+obs_x = c(-4, -1, 0, 3) 
+obs_p = c(17.2, 3.4, 2, -1)
+```
+
+**Plot these four pollution observations as a bar plot using `ggplot` (Hint: your vertical axis is pollution). Make sure that your figure shows the full length of the street, even though there are not observations at all locations. Be sure to label the axes of your plot.** I recommend using the commands `coord_cartesian(xlim = c(-5,5))` to set the limits of your x-axis and `scale_x_continuous(breaks = -5:5, labels = -5:5)` to set the numbers shown on your x-axis.
+
+For aesthetics, the `ggthemes` package is useful. See [here](https://ggplot2.tidyverse.org/reference/ggtheme.html) and [here](https://yutannihilation.github.io/allYourFigureAreBelongToUs/ggthemes/) for examples. Choose a theme for your ggplot that is aesthetically pleasing to you and conveys the information clearly. You can manually change the `theme` of your plot as well, if you like -- type `?theme` to learn more.
+
+```{r}
+### TODO YOUR CODE HERE
+
+obs_df = data.frame(
+  x = obs_x,
+  pollution = obs_p
+)
+
+ggplot(obs_df, aes(x = x, y = pollution)) +
+  geom_point(aes(x = x, y = pollution), size = 3)+
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = -5:5, labels = -5:5) + 
+  labs(x = "Houses",
+      y = "Air Pollution Levels") +
+  theme_classic()
+
+```
+
+### 1.2.
+
+Estimate the pollution level at each of the 11 house locations using nearest neighbor interpolation: i.e., each house should be assigned the same pollution level as that house's nearest neighbor that has an actual pollution observation. **Plot your results, using a bar plot for the actual observations and some other marker (e.g. '+') and color for interpolated values.**
+
+```{r}
+### TODO YOUR CODE HERE:
+
+houses = c(-5:5)
+
+nearest_neighbor = function(x, obs_x, obs_p) {
+  idx = which.min(abs(obs_x - x))
+  obs_p[idx]
+}
+  
+interpolate_points = sapply(houses, nearest_neighbor, obs_x = obs_x, obs_p = obs_p)
+
+nn_df = data.frame(
+  x = houses,
+  pollution = interpolate_points
+)
+
+ggplot() +
+  geom_point(data = nn_df, mapping= aes(x = houses, y = interpolate_points),shape = 4, 
+             col = "red") +
+   geom_point(data = obs_df, mapping = aes(x = x, y = pollution),shape = 21, fill = "black", 
+             size = 3)+
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = -5:5, labels = -5:5) + 
+  labs(x = "Houses",
+      y = "Air Pollution Levels") +
+  theme_classic()
+
+```
+
+### 1.3.
+
+Estimate the pollution level at each of the 11 house locations using inverse-distance weighting interpolation. Use weights equal to $\frac{1}{{distance}^2}$. **Plot your results, using a bar plot for the actual observations and some other marker for interpolated values.**
+
+```{r}
+### TODO YOUR CODE HERE
+
+idw = function(x,obs_x,obs_p) {
+  d = abs(obs_x - x)
+  if (any(d == 0)) { 
+    return(obs_p[d==0])}
+  w = 1/d^2
+  return(sum(w*obs_p)/sum(w))
+}
+
+pollution_idw = sapply(houses, idw, obs_x = obs_x, obs_p = obs_p)
+
+idw_df = data.frame(
+  x = houses,
+  pollution = pollution_idw)
+
+ggplot() +
+   geom_point(data = idw_df, mapping= aes(x = houses, y = pollution),shape = 4, 
+             col = "red") +
+   geom_point(data = obs_df, mapping = aes(x = x, y = pollution),shape = 21, fill = "black", 
+             size = 3) +
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = -5:5, labels = -5:5) + 
+  labs(x = "Houses",
+      y = "Air Pollution Levels") +
+  theme_classic()
+
+
+```
+
+### 1.4.
+
+The true pollution field (which you were not able to observe) is described by $$pollution = 2 -x+\frac{3}{10}x^2-\frac{1}{10}x^3$$ where $x$ is the house number.
+
+**Create a figure displaying the entire street that overlays (1) the true pollution field, (2) the pollution observations, (3) estimates of the pollution field based on nearest neighbor interpolation, and (4) estimates of the pollution field based on inverse distance weighting.**
+
+```{r}
+### TODO YOUR CODE HERE
+
+pollution_true = function(x){
+  2 - x + 3/10*(x^2) - 1/10*(x^3)
+}
+
+houses_true = pollution_true(houses)
+
+
+ggplot() +
+  geom_point(aes(x = houses, y = houses_true, color = "True pollution"),shape = 4) +
+  geom_point(aes(x = houses, y = interpolate_points, color = "Nearest neighbor"), shape = 2) +
+  geom_point(aes(x = houses, y = pollution_idw, color = "IDW interpolation"), shape = 3) +
+  geom_point(aes(x = obs_x, y = obs_p, color = "Observed"),shape = 21,size = 3,fill = "black")+
+  coord_cartesian(xlim = c(-5, 5)) +
+  scale_x_continuous(breaks = -5:5, labels = -5:5) +
+  scale_color_manual(
+    name = "",
+    values = c(
+      "True pollution" = "red",
+      "Nearest neighbor" = "blue",
+      "IDW interpolation" = "green",
+      "Observed" = "black")) +
+  labs(x = "Houses",y = "Air Pollution Levels") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+```
+
+### 1.5.
+
+Evaluate the error caused by these two methods.
+
+**Make a plot of the street displaying the error at each location for each of the two interpolation techniques (error is the difference between the estimated pollution level at a location and the true pollution level at that location).**
+
+```{r}
+### TODO YOUR CODE HERE
+
+nn_error = interpolate_points - houses_true
+
+error_idw = pollution_idw - houses_true
+
+error_df = data.frame(houses = houses, NN = nn_error, IDW = error_idw)
+
+ggplot(error_df) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_point(aes(x = houses, y = NN, color = "Nearest neighbor error"),shape = 21,size = 3,
+    fill = NA) +
+    geom_point(aes(x = houses, y = IDW, color = "IDW error"),shape = 3,size = 3) +
+  coord_cartesian(xlim = c(-5, 5)) +
+  scale_x_continuous(breaks = -5:5) +
+  scale_color_manual(
+    name = "",
+    values = c(
+      "IDW error" = "red",
+      "Nearest neighbor error" = "blue")) + 
+  labs(
+    x = "Houses",
+    y = "Interpolation error (estimated − true)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+error_df
+```
+
+**Did the nearest neighbor technique ever outperform (or perform as well as) the inverse distance weighting technique?**
+
+The nearest neighbor technique outperformed the inverse distance weighting technique on houses -5, 1, 4, 5. This might be due to the fact that the weighted average was farther away and not as accurate.
+
+## 2. Human development and climate
+
+You've been asked by the United Nations Development Programme to help them understand how climate change might influence human development globally. To inform this, you will implement a cross-sectional analysis, comparing how the Human Development Index varies with temperature, sunlight, and rainfall from country to country across the globe.
+
+### 2.1
+
+Let's begin by loading raster data on human development from the file `hdi_raster_predictions_V1.0/hdi_raster_predictions.tif`. The Human Development Index (HDI) is a measure of a population's health, education, and income, and was designed to provide a broader definition of human well-being than gross domestic product (GDP). The data we're using here was creating using a mixture of satellite remote sensing and survey data by [Sherman et al., 2023](https://www.nber.org/papers/w31044).
+
+**Load the HDI data and plot it with national boundaries overlaid**. Hint: to get spatial information on global countries without loading them from a shapefile, you can use the `ne_countries(scale = "small", returnclass = "sf")` from the `rnaturalearth` library. This can be easier than using a shapefile each time.
+
+```{r}
+### TODO YOUR CODE HERE
+
+library(rnaturalearth)
+
+hdi = raster("hdi_raster_predictions_V1.0/hdi_raster_predictions.tif")
+hdi_df = as.data.frame(hdi, xy = TRUE)
+colnames(hdi_df)[3] <- "HDI"
+
+countries = ne_countries(scale = "small", returnclass = "sf")
+
+ggplot()+
+  geom_raster(data = hdi_df, aes(x = x, y = y,fill = HDI))+
+  geom_sf(data = countries,fill = NA,color = "blue",linewidth = 0.2) +
+  scale_fill_viridis_c(name = "HDI",option = "D") +
+  theme_map()
+
+plot(hdi)
+lines(countries, col = "black", lwd = 0.5)
+
+```
+
+### 2.2
+
+We want to conduct a national-level analysis, but our HDI data is gridded. To find the grid cell values associated with each country we can use the `raster::extract` command. The `extract` function will return, for each national polygon, the raster grid cell values within that polygon. You can also pass `extract` a function, and if you do, it will apply that function to the grid cells of each country, and return the output of the function, rather than the grid cell values.
+
+**Calculate the mean HDI for each country of the world.** Hint: you can do this in one line using `raster::extract`. You should set `na.rm=T` when calling the extract function so that when you take the mean, you ignore missing values.
+
+**Then merge the HDI values onto the world countries sf object and plot the countries colored by their HDI.** `extract` returns values in the same order as the sf polygon object so you can add the HDI values by just using the `$` operator (e.g. `world_countries$HDI = HDI_by_country`).
+
+Note: We're starting to have a lot of different packages loaded, which can cause R to be confused about which function you want to call if different packages have the same name for different functions. For example, `extract` might mean one thing in the `raster` package and other in a hypothetical `stats` package. To clarify which package you want to use, you can use the syntax `package::function`. So, for example `raster::extract` would call extract from the `raster` package and `stats::extract` would call extract from the `stats` package. Specifying the function is useful both for readability of your code and for avoiding errors.
+
+```{r}
+### TODO YOUR CODE HERE:
+
+mean_HDI = raster::extract(hdi,countries,fun = mean, na.rm=T)
+
+countries$HDI = mean_HDI
+
+ggplot(countries) +
+  geom_sf(aes(fill = HDI), color = "black", linewidth = 0.2) +
+  scale_fill_viridis_c(name = "Mean HDI",option = "plasma",na.value = "grey90") +
+  theme_map()
+
+
+```
+
+Now, let's prepare the climate data. For this we'll be using average temperature (`world_clim/wc2.1_10m_tavg/`) data from [WorldClim](https://www.worldclim.org/data/worldclim21.html). The data from WorldClim comes as a single raster for each month of the year (e.g., average March temperature), providing temperature values averaged over 1979-2000. In parts 2.3-2.5 you will construct a single annual average for each country, so that it can be analyzed in combination with the national HDI values we calculated above**.** The steps below walk you through one way of doing this. Note that only section 2.3 is a required and graded part of the lab, the remaining sections of the lab are optional. I encourage you to do them if you have time and interest.
+
+### 2.3
+
+-   The first step in processing monthly gridded data into annual national data is to load the data for each month into a single `RasterStack`. Raster data is often stored as many different files within a folder. Thus, to load it, it can be useful to 1) list all the files in a folder using, for example, `fl = list.files("world_clim/wc2.1_10m_tavg/", full.names = T)` and then 2) subset those files using string pattern matching. `grep` is a useful function for this --- e.g., `fl = fl[grep("tif", fl)]` will select all the files that have `tif` in them. Once you have the files you want to load in a vector, you can call `stack(fl)` to load all of the rasters into a single `RasterStack`. A `RasterStack` is like a raster, but it can have many layers. Those layers could indicate temperature rasters during different times of the year (like here), or layers could indicate different colors in an RGB image (e.g., an image could be a RasterStack where the first layer indicates the red intensity, the second layer indicates the blue intensity and the last layer indicates the green intensity).
+
+-   Once you have your data loaded into a `RasterStack`, averaging pixel-wise over the layers in the raster stack (to average over the data for each month of the year for a given grid cell) can be done with a single call of the `overlay` command.
+
+```{r}
+### TODO YOUR CODE HERE
+
+
+fl = list.files("world_clim/wc2.1_10m_tavg/", full.names = T)
+fl = fl[grep("tif", fl)]
+
+raster_stack = stack(fl)
+
+overlay_raster = overlay(raster_stack, fun = mean)
+
+plot(overlay_raster)
+
+```
+
+### 2.4 **(Optional!)**
+
+Repeat the steps in 2.3 to load and the calculate the annual average of precipitation (`world_clim/wc2.1_10m_prec/`) and solar radiation (`world_clim/wc2.1_10m_srad/`), so that we can understand the influence of temperature, precipitation and sunlight together.
+
+```{r}
+### TODO YOUR CODE HERE
+
+```
+
+### 2.5 **(Optional!)**
+
+Now, convert this gridded annual temperature, precipitation, and solar radiation data to national values. This can be done using the `extract` command in the same way as for HDI above. Note that these commands can take some time to run, so if you need to, feel free to save the output so that you only need to run it once (this is not required).
+
+```{r}
+### TODO YOUR CODE HERE:
+
+
+```
+
+### 2.6 **(Optional!)**
+
+Now that you have the national values calculated, let's analyzed them. Create a dataframe containing 1) the country name (`geounit` column) from the national boundaries shapefile data, 2) the national HDI, and 3) the national average temperature, rainfall and solar radiation data. Subset the data to only locations where there is data for all of the variables using the `complete.cases` function.
+
+Using ggplot, make 3 figures. In each figure, plot HDI against one of the three climate variables. Add a `geom_smooth` line to show the nonlinear relationship between HDI and each climate variable. Combine these three figures into a single figure using `plot_grid`. Make sure to specify units when labeling the axes. The units of each variable are: temperature (C), precipitation (mm/month), solar radiation (kJ m^-2^ day^-1^).
+
+```{r}
+### TODO YOUR CODE HERE
+
+
+```
+
+**How do climatological temperature, solar radiation, and rainfall relate to human development? To what degree do you think this relationship is causal? If it's not causal, what other factors might be driving the observed relationship?** [TODO: ANSWER THE QUESTION HERE]
+
+### 2.7 **(Optional!)**
+
+To jointly analyze the effect of these three variables on HDI, let's run a multiple linear regression analysis. Regress national HDI on national temperature, precipitation and solar radiation. Hint: you can run a regression using the `lm` command and visualize the results in a table using the `stargazer` command (with `type = text`).
+
+```{r}
+### TODO YOUR CODE HERE
+
+
+```
+
+**What do you find?** [TODO: ANSWER THE QUESTION HERE]
+
+## Congratulations!
+
+You finished the lab! Please list everyone you worked with on this assignment here:
+
+[TODO: list anyone you worked with]

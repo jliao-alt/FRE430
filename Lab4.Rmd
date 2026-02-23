@@ -1,0 +1,636 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## FRE 490 Spatial Data Analysis and Remote Sensing
+
+##### Instructor: Jonathan Proctor
+
+##### Teaching Assistant: Bhavita Ragoo
+
+##### About this lab:
+
+-   Due date Feb. 3rd, 2025 at 9:30am.
+
+-   You may talk with other students about the lab, but each student is responsible for doing all exercises in the lab themselves and turning in their own write up. We will be checking code for evidence of copying and pasting.
+
+-   This is a newly developed assignment, so if you think there is an error or something is unclear, let us know right away. That will be extremely helpful to us and your fellow students.
+
+-   Submit your lab as both LASTNAME.html and LASTNAME.Rmd on canvas. Please re-run the entire notebook, as needed, prior to submitting to make sure the results show the output from the existing code.
+
+-   Thanks to Solomon Hsiang for sharing some materials this lab is based on.
+
+### Objectives:
+
+In this lab you will learn to use the `sf` package and practice applying spatial analysis to policy evaluation.
+
+### Setup
+
+Install and load the `sf` package.
+
+```{r}
+#install.packages("sf")
+library(sf)
+```
+
+### [lat, lon] or [lon, lat]?
+
+Usually we use x to denote the horizontal dimension and y the vertical dimension. However, in this lab, we will start working with Latitude and Longitude: lat is the vertical dimension and lon is the horizontal dimension, so when we write `[lat, lon]`, the order in which we write the horizontal and vertical dimensions has switched. This is no big deal, but we always have to be aware of which convention we are using. Most functions will expect you to write inputs using the x-y convention where the horizontal dimension is listed first, and some will expect you to use the lat-lon convention with the vertical dimension is listed first. You cannot be too careful with this as errors here can potentially have large implications (e.g., it may result in mismatched data). When you are coding, you should always be aware of this - when in doubt, remember to always plot your map and visually verify that it looks correct. If your map looks strange, make sure to check that the arguments of your function are in the right order. When you are matching data and if you are worried about messing up the indexes, always try to use existing functions first and do not code things up by yourself unless it's necessary. This is true more broadly -- when learning to code, it is useful to write your own functions to learn how they work, but when coding in practice, it is almost always better to use built-in functions when available. These will usually be faster, less error-prone, and easier for others to read.
+
+Below, we're going to work mainly with data sets that contain lat-lon data, but we'll be using many commands that use the x-y convention. This means that you will often type `[lon, lat]` instead of `[lat, lon]`.
+
+## 1. Plotting Polygons
+
+Let's start by constructing some `sf` objects. In the following code block, I have defined coordinates for two polygons, `triangle` and `rectangles`, using a lat-lon coordinate system.
+
+```{r}
+# A triangle
+triangle_latlon = rbind(c(1,2), c(8,4), c(5,10), c(1,2))
+
+# A rectangle
+# A polygon cannot contain multiple polygons (that would be a multipolygon)
+# but it can contain many holes
+rectangles_latlon_exterior = rbind(c(2.5, 7), c(9, 7), c(9, 12), c(2.5, 12), c(2.5, 7))
+rectangles_latlon_interior_hole_1 = rbind(c(3, 8), c(4, 8), c(4, 9), c(3, 9), c(3, 8))
+rectangles_latlon_interior_hole_2 = rbind(c(7, 10), c(8, 10), c(8, 11), c(7, 11), c(7, 10))
+
+```
+
+We can create `sf` polygon objects using the `st_polygon` command. I've constructed the triangle as an example below. Your job is to construct the rectangle, being careful to not confuse x, y and lat, lon.
+
+```{r}
+# Create a polygon object for the triangle 
+triangle_poly = st_polygon(list(triangle_latlon[,c(2,1)]))
+
+# Create a polygon object for the rectangle with two holes
+# In the list passed to st_polygon, the first element is the exterior and the
+# following elements are the interior holes.
+
+### TODO YOUR CODE HERE
+
+rectangle_poly = st_polygon(list(rectangles_latlon_exterior[,c(2,1)],
+                                 rectangles_latlon_interior_hole_1[,c(2,1)],
+                                 rectangles_latlon_interior_hole_2[,c(2,1)]))
+
+plot(rectangle_poly)
+plot(triangle_poly)
+
+```
+
+Next, following the pseudocode below written as comments, make a plot of the triangle and rectangles.
+
+-   Plot the triangle in black and the rectangles in blue.
+
+-   Create a buffer with distance 1 around the triangle and plot it as a black dashed line.
+
+Note that, by default, `plot` will set its visual limits to the bounding box of the first object plotted. This can create an issue when you add additional polygons using `plot(…, add=T)`. To correct for this we can find the combined bounding box for the union of the polygons to be plotted and then pass that to the plot function, as shown below.
+
+```{r}
+
+# Create a buffer around the triangle with distance 1
+
+### TODO YOUR CODE HERE TO CREATE THE BUFFER
+
+triangle_poly_buffer = st_buffer(triangle_poly,dist = 1)
+rectangle_poly = st_polygon(list(rectangles_latlon_exterior[,c(2,1)]))
+
+# Find the overall bounding box of both objects
+combined_bbox = st_bbox(st_union(triangle_poly_buffer, rectangle_poly))
+
+# Plot the triangle
+plot(triangle_poly, axes = T,
+     border = "black",
+     xlab = "Longitude", 
+     ylab = "Latitude", 
+     xlim = c(combined_bbox$xmin, combined_bbox$xmax),
+     ylim = c(combined_bbox$ymin, combined_bbox$ymax))
+
+### TODO YOUR CODE HERE TO FINISH THE PLOT
+
+# Add the rectangle (blue)
+plot(rectangle_poly,
+     add = T,
+     border = "blue")
+
+# Add the triangle buffer (black dashed)
+plot(triangle_poly_buffer,
+     add = T,
+     border = "black",
+     lty = 2)
+
+
+
+```
+
+### 1.2. Plot the union and the intersection of our polygons
+
+In two new figures, plot the union of the triangle and rectangles and the intersection of the triangle and rectangles. This will require you to calculate the union (`st_union`) and intersection (`st_intersection`) first, and then plot. Make sure they are labeled or titled so that it is clear which is which. You can find a useful "cheat-sheet" of `sf` commands here: <https://github.com/rstudio/cheatsheets/blob/main/sf.pdf>. Note that this is a useful repository of cheat-sheets for other R packages as well.
+
+```{r}
+### TODO YOUR CODE HERE
+
+union = st_union(rectangle_poly,triangle_poly)
+intersection = st_intersection(rectangle_poly,triangle_poly)
+
+plot(union)
+plot (intersection)
+
+```
+
+## 2. Baywatch Hawaii
+
+As a coast-guard planner for the state of Hawaii, you are asked to evaluate whether (and if so, where) your team should construct additional fast-response rescue heliports. Currently, there is a single fast-response heliport in Oahu (the capital city) and it would be great if the state could rely on only that station because it is expensive to build additional ports. However, your team's mandate is to make sure that surfers and recreational fishing boats (which may be as far as 20km off any coast) can be reached by a fast response helicopter. These helicopters can fly a distance of 600 km, but they need to get back to their starting point, so their effective rescue range is only 300 km. Your task is to determine if there are any vulnerable regions of coastline (out to 20 km) that cannot be reached by the current heliport in Oahu -- and if so, where an additional heliport should be built.
+
+### 2.1. Examine the data visually.
+
+Begin by loading a shapefile for U.S. states (`USA_adm1.shp`) using the `st_read` command. Call it `usa`. Note that this is a large shapefile so plotting it could take a while; I recommend not trying to. To make things more manageable and select the data we need for this analysis, subset the USA polygon to create a new variable, called `hawaii` keeping only the polygons related to Hawaii.
+
+Make a plot of the Hawaii polygon. Hint: you can plot the shape without coloring by any attributes by plotting just the geometry column -- e.g., `plot(hawaii$geometry)` or `plot(hawaii["geometry"])`.
+
+```{r}
+### TODO YOUR CODE HERE
+
+usa = st_read("USA_adm1.shp")
+
+hawaii = subset(usa, NAME_1 == "Hawaii")
+
+plot(hawaii$geometry)
+
+```
+
+Hawaii is a simple features object where the geometry type is a multipolygon. You can see this by examining the output of `str(hawaii)`. We can view the coordinates of the points that are being plotted (like the triangle and rectangle examples above) by indexing into the multipolygon object within the geometry column of `hawaii`. Let's peel back this multipolygon object layer by layer, like an onion, to get a sense of what's inside. Multipolygon objects are a combination of two classes: `sf` and `data.frame`. Dataframes store tabular data like what you would read from a csv. The spatial part of the multipolygon object is stored in the geometry column of the dataframe, and can be accessed using the `$` operator, like any other column. For an sf object with geometry type multipolygon, the geometry column is a list of lists of lists (i.e., three lists deep, so it can be indexed like this: [[.]][[.]][[.]]).
+
+-   The first layer of the list indexes which multipolygon object we're looking at (i.e., which state in the usa shapefile). If we were indexing into `usa$geometry` we'd have 52 options, since there are 52 states. If we were indexing into `hawaii$geometry` we'd have only one option.
+
+-   The second layer of the multipolygon `hawaii$geometry[[1]][[1]]` indexes which of the polygons that make up Hawaii we want to consider. We have 30 options here; for example, `hawaii$geometry[[1]][[25]]` would select the 25th polygon of the 30 polygons that make up Hawaii.
+
+-   The third layer of the multipolygon indexes which "ring" of the individual polygon to plot. The first index refers to the exterior ring (the outer rectangle in the example above), and then subsequent indices refer to "holes" in the polygon (the inner rectangles in the example above). There is always a first element (exterior ring) and there are sometimes holes but not always. Check out the results from the following lines of code to get a better sense of what the different levels of the multipolygon objects contain.
+
+```{r}
+#From this we can see that there are 30 polygons within this multipolygon object
+str(hawaii$geometry[[1]])
+#From this we can check out the 25th polygon in hawaii
+str(hawaii$geometry[[1]][[25]])
+#From this we can see that it takes 7664 points to create the first polygon out of the 30 polygons in hawii
+str(hawaii$geometry[[1]][[1]][[1]])
+#These are the lon-lat coordinates of the first three points used to draw the first polygon of Hawaii.
+hawaii$geometry[[1]][[1]][[1]][1:3,]
+```
+
+Following the example above, **how many individual polygons does it take to draw Alabama in the usa shapefile?**
+
+```{r}
+### TODO YOUR CODE HERE
+
+str(usa$geometry[[1]])
+
+```
+
+23 polygons
+
+For simplicity, for the rest of the problem we're going to mask Hawaii to the closest chunk of islands -- dropping two polygons that are far to the West. We do this by creating a rectangle mask and then keeping only the islands within that mask using the `sf_intersection` command:
+
+```{r}
+#Mask Hawaii to main cluster of islands
+hawaii_mask = rbind(c(-161, 18), c(-154, 18), c(-154, 23), c(-161, 23), c(-161, 18))
+hawaii_mask = st_sf(geometry = st_sfc(st_polygon(list(hawaii_mask)), crs = st_crs(hawaii)))
+hawaii = st_intersection(hawaii, hawaii_mask)
+
+plot(hawaii$geometry)
+```
+
+Nice, that's slightly easier to work with now!
+
+### 2.2. Calculate 20km in degrees of longitude
+
+**Calculate the approximate number of degrees of longitude that would equal the flight range (300km) of a helicopter leaving the Oahu heliport** (Hint: this doesn't require R, but if you use R you may need the function `cos()`. Note that this function takes inputs in radians, not degrees. Remember that you can convert degrees to radians by multiplying by $\pi$ and dividing by 180. Also **calculate the number of degrees of longitude that would equal 20 km**, the off-coast distance that your helicopter team must monitor.
+
+You'll need to know the specific location of the Oahu heliport, which is given in the following code.
+
+```{r}
+# Create a data frame with the point coordinates of the Oahu heliport
+oahu_heliport_coords = data.frame(x = c(-157.922945), y = c(21.329112))
+
+# Create an sf point object
+oahu_heliport = st_sf(geometry = st_sfc(st_point(cbind(oahu_heliport_coords$x, oahu_heliport_coords$y))), crs = st_crs(hawaii))
+
+### TODO ANSWER THE QUESTION HERE
+
+latitude_rad = cos((21.329112*pi)/180)
+
+longitude = 111 * latitude_rad 
+
+heli_flight_range = 300/longitude
+
+off_coast_distance = 20/longitude
+
+print(paste("The number of degrees of longitude that would equal the flight range (300km) of a helicopter leaving the Oahu heliport is",heli_flight_range))
+
+print(paste("The number of degrees of longitude that would equal 20 km is", off_coast_distance))
+
+```
+
+### 2.3 Make some plots of Hawaii.
+
+We'll walk you through making a single plot in 2.3.1 - 2.3.4. Each section adds additional aspects to the plot, but please just make one plot.
+
+#### 2.3.1
+
+Plot the boundaries of the Hawaiian islands the same way that you plotted the rectangles in the first problem. Then, mark the Oahu heliport with a different color.
+
+A note on colors: A good graph starts with a carefully selected palette. From now on, we will not be telling you what color to use for which graph, select the ones that make you the happiest! One important thing to keep in mind is that you would want your color palette to be color blind safe. The [ColorBrewer](http://colorbrewer2.org/) website provides some useful resources for this. ColorBrewer gives colors in HEX format, as well as others; you can specify these colors as strings in R commands (e.g. `plot(…, col = "#9ebcda")`).
+
+#### 2.3.2
+
+Make a new polygon that shows the limit of a helicopter's range if it were to leave from the heliport in Oahu. **Plot this polygon on your map of Hawaii.** The `st_buffer` command will be useful here.\
+\
+Note: Be careful with the units of your input to the `dist` argument of `st_buffer`. There are three ways to proceed here -- I recommend the first one for simplicity. 1) `st_buffer` in this setting should by default accept input in the units of meters (e.g. `dist = XXkm*1000m/km`). Note that I've written the "km" and "m/km" in here to clarify the units but they should not be in the R code. `sf` deals with the complexities of using meters in a geographic coordinate system in the background by using the spherical geometry, or specifically the "s2geometry", also often refereed to as the "S2" library (make sure `sf_use_s2()` is `TRUE` in your R settings for this to happen). This allows the `sf` package to account for the fact that the Earth is more like a sphere (or ellipsoid) than a plane without you having to think about it. For more details on this, see here: <https://r-spatial.github.io/sf/articles/sf7.html#buffers-1>. 2) Another option is to use the `units` package and pass in degrees calculated above `units::set_units(XXdegrees, degree)`. This introduces some error because longitude and latitude have different lengths in km, but for this exercise we will accept that margin of error. 3) A third option is instead of using a **geographic coordinate system** you could use a **projected coordinate system.** This involves a few more steps, but you're welcome to explore this if you'd like. I'll post solutions using all three options so you can see different approaches that all arrive at very similar (though not always perfectly identical) answers.
+
+#### 2.3.3
+
+Compute the boundary of the region that your helicopter team must cover (all ocean within 20 km of the coastline). Because the coastline of the islands are complex, this calculation may take a little bit of time for R to compute. If it takes a bit of time to run this calculation, once R finishes, you can save the output using `st_write` so that you don't have to run this again (this is not a requirement, but an option if needed).
+
+#### 2.3.4
+
+**Will the single helipad in Oahu be able to provide coverage for all of the coastal waters (≤ 20 km) around Hawaii?** If not, isolate regions of coastal waters that do not have coverage and plot them will a filled-in color. Hints: to do this I used `st_difference` twice. In one of these calls (specifically, when calculating the difference between the helicopter-range buffer and the Hawaii islands buffer) I had to specify `dimension = "polygon"` to avoid an error. Thank you StackExchange!
+
+Make sure your map (containing all the objects so far) looks nice and is well labeled because it is the figure you will use to make your case to the state government on whether or not the state needs to construct a new heliport. Hint: you can add text directly to your plots using the `text` command.
+
+```{r}
+### TODO YOUR CODE HERE:
+
+combined_bboxs = st_bbox(st_union(hawaii$geometry))
+
+plot(hawaii$geometry, axes = T,
+     border = "black",
+     xlab = "Longitude", 
+     ylab = "Latitude", 
+     yaxt = "n",
+     xlim = c(combined_bboxs$xmin, combined_bboxs$xmax),
+     ylim = c(combined_bboxs$ymin, combined_bboxs$ymax))
+
+lat_ticks = seq(18, 24, by = 1)
+axis(2,
+     at = lat_ticks,
+     labels = paste0(lat_ticks, "°N"))
+
+#buffer oahu heliport
+
+heli_range = st_sf(geometry = st_buffer(oahu_heliport, dist = 300000), crs = st_crs(hawaii))
+
+plot(heli_range,
+     add = TRUE,
+     border = "#fc8d59",
+     lwd = 2)
+
+plot(st_geometry(oahu_heliport),
+     add = TRUE,
+     pch = 19,
+     col = "#ca0020")
+
+#buffer 20 km range from coastline
+
+st_write = st_sf(geometry = st_buffer(hawaii$geometry, dist = 20000),crs = st_crs(hawaii))
+
+plot(st_write,
+     add = T, 
+     border = "#91bfdb",
+     lwd = 2)
+
+#find coverage of oahu heliport 
+
+coastal = st_difference(st_write,hawaii$geometry, dimension = "polygon")
+areas = st_difference(coastal$geometry, heli_range, dimension = "polygon")
+
+plot(areas, 
+     add = T,
+     col = "#0571b0")
+
+legend("bottomleft", 
+       legend = c("Oʻahu Heliport","Helicopter Range","Boundary Coastal Waters","Uncovered Areas"), fill = c(NA,NA,NA,"#0571b0"),border = c(NA,NA,NA,"black"), lwd = c(NA,2,2,NA),pch = c(19,NA,NA,NA), col = c("#ca0020","#fc8d59","#91bfdb",NA),pt.cex = 1,bg = "white",cex = 0.8)
+
+```
+
+### 2.4. Where should new heliports go, if anywhere?
+
+If you think that one or more heliports are required to ensure that all the coastal waters can be reached by a fast-response helicopter, propose locations where you think new heliports should be constructed to ensure complete coverage. This does not have to be optimized.
+
+Construct a new well-labeled map with the coverage regions for Oahu and your proposed heliport locations overlaid to convince decision-makers that complete coverage of coastal waters can be achieved under your proposed plan. If you think it is an effective display, you could plot the union of multiple heliport coverage regions to show the total covered area.
+
+```{r}
+
+### TODO YOUR CODE HERE
+
+# create new heliport
+kona_helipad_coords = data.frame(x = c(-155.9176033466496), y = c(19.5200737))
+kona_heliport = st_sf(geometry = st_sfc(st_point(cbind(kona_helipad_coords$x, kona_helipad_coords$y))), crs = st_crs(hawaii))
+
+#buffer and union existing and new heliport
+
+heli_range1 = st_buffer(kona_heliport, dist = 300000)
+heli_combined = st_union(heli_range,heli_range1)
+
+#find where heliport coverage doesn't reach  
+coastal1 = st_difference(st_write,hawaii$geometry)
+areas1 = st_difference(coastal, heli_combined, dimension = "polygon")
+
+#plot
+plot(hawaii$geometry, axes = T,
+     border = "black",
+     xlab = "Longitude", 
+     ylab = "Latitude", 
+     yaxt = "n",
+     ylim = c(18,24))
+
+lat_ticks = seq(18, 24, by = 1)
+axis(2,
+     at = lat_ticks,
+     labels = paste0(lat_ticks, "°N"))
+
+plot(st_geometry(oahu_heliport),
+     add = T,
+     pch = 19,
+     col = "#ca0020")
+
+plot(st_geometry(kona_heliport),
+     add = T, 
+     pch = 19,
+     col = "#ca0020")
+
+plot(st_write,
+     add = T, 
+     border = "#91bfdb",
+     lwd = 2)
+
+plot(areas1, 
+     add = T,
+     col = "#0571b0")
+
+plot(heli_combined,
+     add = T,
+     border = "#fc8d59",
+     lwd = 2)
+
+
+legend("bottomleft", 
+       legend = c("Heliport","Helicopter Range","Boundary Coastal Waters","Uncovered Areas"), fill = c(NA,NA,NA,"#0571b0"),border = c(NA,NA,NA,"black"), lwd = c(NA,2,2,NA),pch = c(19,NA,NA,NA), col = c("#ca0020","#fc8d59","#91bfdb",NA),pt.cex = 1,bg = "white",cex = 0.8)
+
+
+```
+
+### 2.5. How will the new heliport affect the state's costs?
+
+Your plan to build more heliports costs money for the state (the fixed cost of construction), but it could reduce spending on helicopter fuel (a marginal cost of rescue operations) and other operational costs since many helicopter trips can be made shorter if a helicopter is dispatched out of a new site rather than from the Oahu heliport (in cases where the new site is closer). In this part, we will help decision-makers see this point by running a simple simulation of annual rescue operations under two scenarios: (A) helicopters only use the Oahu heliport and (B) helicopters use the Oahu heliport and the new heliport in the location(s) you proposed.
+
+#### 2.5.1. Simulate some events.
+
+Begin by simulating a large number of emergency events (roughly 100) that occur within the 20 km coastal waters as a Poisson point process (PPP). To do this, simulate a PPP the same way that you did in the last lab over a region that spans the area around Hawaii. Except, unlike last time, we will delete events that occur outside of the 20 km coastal zone. If the PPP generates an event that occurs outside of the coastal zone, we will not store the event. To do this, you will need to create a vector of roughly 1000 uniformly random locations for events that span latitudes from 18.5 to 22.5 degrees and longitudes from −161 to −154 degrees. You can do this with the following cells.
+
+**In order to run the following cells, you need to have created a `sf` object called `coastal` that represents the coastal areas (the buffer areas surrounding but not including Hawaii). You don't have to write additional code to complete this question, but read the code carefully and make sure you understand them.**
+
+```{r}
+N = 1000
+# Set a random seed so your work is reproducible.
+set.seed(123)
+lon = runif(N) * 7 - 161
+lat = runif(N) * 4 + 18.5
+
+# Create an sf point object
+emergency_events = st_sf(geometry = st_sfc(st_multipoint(cbind(lon,lat)) ),
+                    crs = st_crs(hawaii))
+
+# Plot
+plot(emergency_events, pch = 4, cex = 0.3, col = "orange",
+     main = "Unconditional PPP", axes = T)
+plot(coastal$geometry, add=T, border = "grey", color = "transparent")
+plot(hawaii$geometry, add=T, border = "black", color = "transparent")
+
+```
+
+Then, we need to keep just the events within the coastal regions
+
+```{r}
+
+# Keep just the events within the coastal regions
+coastal_emergencies = st_intersection(emergency_events, coastal)
+
+# Plot
+plot(coastal_emergencies$geometry, pch = 4, cex = 0.3, col = "orange", main = "Unconditional PPP", axes = T)
+plot(coastal$geometry, add=T, border = "grey", color = "transparent")
+plot(hawaii$geometry, add=T, border = "black", color = "transparent")
+
+
+```
+
+These are the simulated emergency events that your helicopters will need to respond to. Keep the set of emergencies that you use fixed for both scenarios (A) and (B) so that you can be sure that all changes in your results are caused by your policy proposal and not the data changing.
+
+### 2.5.2. Plot your helicopters' paths under the two scenarios.
+
+Plot two figures displaying the path of your helicopters under scenarios (A) and (B) described above (one figure per scenario). For each scenario and for each emergency event, find the closest heliport and assume that the rescuing helicopter is dispatched from that heliport (since it makes sense to dispatch a helicopter from the nearest heliport). In scenario (A), there is only one heliport that can be used. After a helicopter flies to an emergency site, it flies back to its original heliport. To visualize the distances that each helicopter flies, plot a line from each emergency site to the nearest heliport (under each scenario).
+
+Hints:
+
+-   For scenario A, first select the events that can be saved --- these are the only ones you need to draw lines for in this scenario.
+
+-   To plot lines along with your shapefiles you can create linestring (`st_linestring`) and multilinestring (`st_multilinestring`) objects. I iterated through all of the events, created a linestring for each event, and stored that in a list. Then I created a multilinestring from that list. To create a linestring you can call `st_linestring(rbind(COORDINATES_FROM_POINT_A, COORDINATES_FROM_POINT_B))` where the coordinates can be recovered from `sf` point and multipoint object geometrys.
+
+-   For scenario B, you need to calculate the distances between many points, so that you can determine which of the two heliports is closer to each event. This can be done using the `compute_distances` function from previous labs. When calculating distances using the coordinates in latitude and longitude, don't worry about changes in longitude length depending on latitude -- this is a rough approximation but it simplifies the calculation, and we are at pretty low latitude, so the error is not large.
+
+```{r}
+### TODO YOUR CODE HERE
+
+oahu_zone = st_cast(st_intersection(heli_range, coastal_emergencies), "POINT")
+
+# Function to extract coordinates from an sf POINT
+get_coords = function(pt) {
+  st_coordinates(pt)[1, ]
+}
+
+# Scenario A
+
+lines_A = list()
+
+heli_coords = st_coordinates(oahu_heliport)[1, ]
+
+for (i in seq_len(nrow(oahu_zone))) {
+  event_coords = get_coords(oahu_zone[i, ])
+  lines_A[[i]] = st_linestring(
+    rbind(heli_coords, event_coords))
+}
+
+path_A = st_multilinestring(lines_A)
+
+plot(hawaii$geometry, axes = T,
+     border = "black",
+     xlab = "Longitude", 
+     ylab = "Latitude", 
+     yaxt = "n",
+     ylim = c(19,23))
+
+axis(2,at = lat_ticks,labels = paste0(lat_ticks, "°N"))
+
+plot(coastal$geometry, add = T, border = "grey")
+plot(hawaii$geometry,add = T, border = "black",lwd = 1.5)
+plot(oahu_zone, add = T, col = "orange", pch = 4, cex = 0.6)
+plot(path_A, add = T, col = "blue", lwd = 1)
+plot(oahu_heliport, add = T, pch = 19, col = "#ca0020", cex = 1.2)
+
+```
+
+```{r}
+#Scenario B 
+
+compute_distances = function(src_x, src_y, dest_x, dest_y){
+  # Computes the distances from every source point to every destination point.
+  # Args:
+  #      src_x, src_y: the x and y coordinates for source points. 
+  #          Denote the length of each array as dim_src.
+  #      dest_x, dest_y: the x and y coordinates for destination points.
+  #          Denote the length of each array as dim_dest.
+  #  Returns:
+  #      a dim_src by dim_dest array containing the distances. 
+
+  dim_src = length(src_x)
+  dim_dest = length(dest_x)
+  dist_arr = array (NA, dim = c(dim_src,dim_dest))
+
+  for (i in 1:dim_src) {
+    for (j in 1:dim_dest) {
+      dist_arr[i,j] = sqrt((src_x[i]-dest_x[j])^2+(src_y[i]-dest_y[j])^2)
+    }
+  }
+
+  return (dist_arr)
+
+}
+
+event_coordsB = st_coordinates(st_cast(coastal_emergencies,"POINT"))
+src_x = event_coordsB[,1]
+src_y = event_coordsB[,2]
+
+heli_coords_combined = rbind(st_coordinates(oahu_heliport),st_coordinates(kona_heliport))
+dest_x = heli_coords_combined[,1]
+dest_y = heli_coords_combined[,2]
+
+D = compute_distances(src_x, src_y, dest_x, dest_y)
+
+
+#assigning each event to nearest heliport
+nearest_heliport = apply(D, 1, which.min)
+
+lines_B = list()
+
+for (i in seq_len(nrow(event_coordsB))) {
+
+  event_xy = event_coordsB[i, ]
+
+  if (nearest_heliport[i] == 1) {
+    heli_xy = heli_coords_combined[1, ]
+  } else {
+    heli_xy = heli_coords_combined[2, ]
+  }
+
+  lines_B[[i]] = st_linestring(
+    rbind(heli_xy, event_xy)
+  )
+}
+
+path_B = st_sfc(lines_B, crs = st_crs(hawaii))
+
+plot(hawaii$geometry, axes = T,
+     border = "black",
+     xlab = "Longitude", 
+     ylab = "Latitude", 
+     yaxt = "n",
+     ylim = c(18.5,22.5))
+
+axis(2,at = lat_ticks,labels = paste0(lat_ticks, "°N"))
+
+plot(coastal$geometry, add = T, border = "grey")
+plot(hawaii$geometry,add = T, border = "black",lwd = 1.5)
+plot(coastal_emergencies, add = T, col = "orange", pch = 4, cex = 0.6)
+plot(path_B, add = T, col = "blue", lwd = 1)
+plot(oahu_heliport, add = T, pch = 19, col = "#ca0020", cex = 1.2)
+plot(kona_heliport, add = T, pch = 19, col = "#ca0020", cex = 1.2)
+
+```
+
+### 2.5.3. Plot the distribution of distances traveled
+
+Create two figures illustrating the distribution of distances (using either histogram or density plots) flown by all rescuing helicopters under the two scenarios (one figure for each scenario). Be sure to consider the return trip part of the distance flown by a helicopter. **What is the average trip distance for each scenario?**
+
+To simplify the calculation, you can convert degrees to kilometers by multiplying 111 km/degree. Given that we are not in a high-latitude region, this is reasonable, but again bear in mind that this is just **a very rough approximation**.
+
+```{r}
+
+### TODO YOUR CODE HERE
+
+# Scenario A
+
+event_coordsA = st_coordinates(st_cast(oahu_zone, "POINT"))
+
+distA = sqrt((event_coordsA[,1]- oahu_heliport_coords[,1])^2 + 
+              (event_coordsA[,2] - oahu_heliport_coords[,2])^2)
+
+distA = (distA*2)*111
+
+mean_A = mean(distA)
+
+print(paste0("The average trip distance for scenario A is ", round(mean_A,2)))
+
+hist(distA,
+     main = "Scenario A: Flight Distances",
+     xlab = "Distance (km)",
+     col = "lightblue",
+     border = "black")
+
+
+# Scenario B
+
+distB = c()
+
+for (i in seq_len(nrow(event_coordsB))) {
+  heli_xy = heli_coords_combined[nearest_heliport[i], ]
+  event_xy = event_coordsB[i, ]
+  distB[i] <- sqrt((event_xy[1] - heli_xy[1])^2 + (event_xy[2] - heli_xy[2])^2) 
+}
+
+distB = (distB*2)*111
+
+mean_B = mean(distB)
+
+print(paste0("The average trip distance for scenario B is ", round(mean_B,2)))
+
+hist(distB,
+     main = "Scenario B: Flight Distances",
+     xlab = "Distance (km)",
+     col = "lightblue",
+     border = "black")
+
+```
+
+### 2.5.4. Calculate costs
+
+Assuming it costs \$30 per 1 km of helicopter travel and \$37,000 for each emergency that does not get rescued (since in scenario A there is not complete coverage - this is the average cost of losing the boat and additional hospital care), **what is the total cost of operating the rescue system under the two scenarios for your full sample of simulated emergencies (which occurred over a year)? In addition to providing full coverage of Hawaii's coastal waters, how much money did your proposal save?**
+
+```{r}
+### TODO YOUR CODE HERE
+
+total = nrow(event_coordsB)
+rescuedA = nrow(oahu_zone)
+total_costA = (sum(distA)*30) + ((total-rescuedA)*37000)
+total_costB = (sum(distB)*30)
+
+print(paste0("The total cost of scenario A is $",round(total_costA,2)))
+print(paste0("The total cost of scenario B is $",round(total_costB,2)))
+
+savings = total_costA-total_costB
+print(paste0("The proposal saved $",round(savings,2)))
+```
+
+### Congratulations!
+
+You finished the lab! Please list everyone you worked with on this assignment here:
+
+[TODO: list anyone you worked with]

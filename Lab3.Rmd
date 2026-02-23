@@ -1,0 +1,530 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## FRE 490 Spatial Data Analysis and Remote Sensing
+
+##### Instructor: Jonathan Proctor
+
+##### Teaching Assistant: Bhavita Ragoo
+
+##### About this lab:
+
+-   Due date Jan. 27th, 2026 at 9:30am.
+
+-   You may talk with other students about the lab, but each student is responsible for doing all exercises in the lab themselves and turning in their own write up. We will be checking code for evidence of copying and pasting.
+
+-   This is a newly developed assignment, so if you think there is an error or something is unclear, let us know right away. That will be extremely helpful to us and your fellow students.
+
+-   Submit your lab as both LASTNAME.html and LASTNAME.Rmd on canvas. Please re-run the entire notebook, as needed, prior to submitting to make sure the results show the output from the existing code.
+
+-   Thanks to Solomon Hsiang for sharing materials this lab is based on.
+
+## Objectives:
+
+In this lab you will learn to analyse spatial point processes and gain more familiarity with important coding practices like writing functions and plotting.
+
+## 1. Analyzing Crimes by Attributes
+
+The dataset `Lab3_crime.csv` contains the location of 200 crimes as well as information on whether the crime was violent (the variable `violent`=1) or not (the variable `violent` = 0). It also includes the month in which the crime was committed (the variable `month`). Here we want to see if there are any patterns in crime based on their attributes.
+
+### 1.1 Mapping crime events
+
+Let's start by reading the dataset into R and the plotting the locations of the crimes. Useful functions for checking out a dataset after you've read it in are `head` and `tail`, as well as `View`. Use `ggplot` to plot the data -- while it's a little more complicated than the base R functions, it gives much more flexibility and allows you to produce more compelling figures. `ggplot` builds up graphics layer by layer. You can start by creating a blank canvas using the `ggplot` function. Then you can add layers, using the `+`, as you're interested -- in this case, a `geom_point` layer will allow you to plot the points. Within the `geom_point` layer, you need to specify the `data` and `aes`, which is short for aesthetics. `ggplot` uses dataframes for the data, so sometimes the first step to plotting is to get your data that you'd like to plot into a dataframe structure, with each row representing a single observation (here, a point). In this case, we're starting with a dataframe so that part is done for you. Next, you need to specify the `aes` or aesthetics. That's where you specify the `x` and `y` variables you want to plot, as well as other aspects of the plot that are a function of the data in the dataframe, like the color or size of the points. Note that you can specify the `data` and `aes` in the `ggplot` call, in which case that information will be passed to the `geom_point` call, or in the `geom_point` call directly.
+
+```{r}
+### TODO: YOUR CODE HERE
+
+library(ggplot2) 
+
+crimes = read.csv("Lab3_crime.csv")
+head(crimes)
+tail(crimes)
+
+ggplot() + 
+  geom_point(data = crimes, mapping = aes(crime_x,crime_y), colour = "blue", size = 2)
+```
+
+### 1.2 Separately analyzing violent and non-violent crime
+
+Now we want to see if the spatial pattern in violent and non-violent crime is different by plotting them as two different colors. To color a variable by a column in the dataframe use the `col` option in the `aes` part of the `geom_point` function. To make the color scale discrete rather than continuous, you can convert the `violent` column to a factor using the `as.factor` function. In R, categorical variables (e.g., type of crime) are often stored as "factors" in contrast with numeric variables (e.g., the coordinate of the crime).
+
+We'll be using `ggplot` throughout the rest of this lab, and the course, so it's worth getting a deeper sense of how the library works. I'd recommend this tutorial (<https://r-statistics.co/ggplot2-Tutorial-With-R.html>) -- specifically the "ggplot2 Short Tutorial", "ggplot2 Tutorial 1 - Intro", and "ggplot2 Tutorial 2 - Theme". These will present slightly more information than you need in this lab, but it's worth seeing what the library can do. We will also have an in-class tutorial on ggplot2 later in the course to polish your understanding. But for now, the best way to learn is to use it!
+
+```{r}
+### TODO: YOUR CODE HERE
+
+violent = as.factor(crimes$violent)
+
+g1 = ggplot(crimes, aes(crime_x,crime_y)) + geom_point(aes(col=violent), size = 2)
+
+plot(g1)
+
+```
+
+### 1.3 Temporal distribution of crimes
+
+Now examine how the distribution of all crimes evolves month by month by plotting each month separately. To make comparisons across months easier, let's put them all on the same figure as 12 different panels (e.g. January will be a small map next to a separate small map for February).
+
+Hints: The way I recommend to do this is to create 12 separate plots using `ggplot` and then put them together using the `plot_grid` function from the `cowplot` library. Begin by creating an empty `list` variable called something like "gglist" and then fill that `list` with 12 `ggplot` objects using a `for` loop. A `list` is like a vector, but it can hold pretty much anything and the objects in the list can be different types. Elements of lists are assigned and obtained using two brackets -- e.g., `gglist[[i]] = ggplot(…) + …`. When creating the plots for each month, you'll need to select data just for that month. You can do so using boolean indexing. Boolean indexing is where you select, for example, rows from a dataframe by passing in a vector of true and false values with the same length as the number of rows in the dataframe. For example, if there was a dataframe called "df" with a column called "year" you could select the rows where the year is 1991 using the code `df[df$year == 1991, ]`. Remember that when indexing into a dataframe, you select the rows first, and then the columns (i.e., [rows, columns]) and that an empty index indicates you want all values. So this is saying: give me the rows of the dataframe df where the year is 1991 and give me all the columns.
+
+```{r}
+### TODO YOUR CODE HERE: 
+
+#install.packages("cowplot")
+library(cowplot)
+
+gglist = list()
+
+for (i in 1:12) {
+  month_data = crimes[crimes$month == i,] 
+  gglist[[i]] = ggplot(month_data, aes(crime_x,crime_y)) + geom_point(aes(col=violent),size = 2) + 
+    labs(title = month.name[i])
+}
+
+plot_grid(plotlist = gglist)
+```
+
+### 1.4. Practice summarizing the data
+
+How many crimes are there in March? How many of those are violent crimes?
+
+There were 12 crimes in March, with 2 of them being violent crimes.
+
+```{r}
+### TODO YOUR CODE HERE
+#install.packages("dplyr")
+library(dplyr)
+
+gglist[3] 
+
+march = subset(crimes, month == 3)
+
+march %>% count(month, violent)
+
+```
+
+### 1.5 Spatial analysis of crime data
+
+Create a new attribute that describes the Euclidean distance from the location of each crime to the nearest violent crime (the value of this new attribute should be zero for all violent crimes). Plot a histogram showing the distribution of these nearest-violent-crime distances (using the base R plotting command `hist` here is fine). **Why does this distribution look the way it does?**
+
+Some tips:
+
+Write a function that can be re-used (Your future self will thank you!). You will likely have to write a double loop, where you loop over the set of source points first, and then inside that loop, you loop over the set of destination points.
+
+```{r}
+### TODO YOUR CODE HERE 
+
+
+compute_distances = function(src_x, src_y, dest_x, dest_y){
+  # Computes the distances from every source point to every destination point.
+  # Args:
+  #      src_x, src_y: the x and y coordinates for source points. (Non-Violent Crimes)
+  #          Denote the length of each array as dim_src.
+  #      dest_x, dest_y: the x and y coordinates for destination points. (Violent Crimes)
+  #          Denote the length of each array as dim_dest.
+  #  Returns:
+  #      a dim_src (175) by dim_dest (25) array containing the distances. (Sees the distance   #      from every violent point)
+  
+  dim_src = length(src_x)
+  dim_dest = length(dest_x)
+  dist_arr <- array (NA, dim = c(dim_src,dim_dest))
+  
+  for (i in 1:dim_src) {
+    for (j in 1:dim_dest) {
+      dist_arr[i,j] = sqrt((src_x[i]-dest_x[j])^2+(src_y[i]-dest_y[j])^2)
+    }
+  }
+  
+  return (dist_arr)
+  
+}
+
+
+#Calculate distances from all crimes to the violent crimes:
+
+violent_crimes <- crimes[crimes$violent == 1, ]
+nonviolent_crimes <- crimes[crimes$violent == 0, ]
+
+src_x = nonviolent_crimes$crime_x
+src_y = nonviolent_crimes$crime_y
+dest_x = violent_crimes$crime_x
+dest_y = violent_crimes$crime_y
+
+crimes_dist = compute_distances(src_x,src_y,dest_x,dest_y)
+
+
+#For each crime calculate the minimum distance:
+
+min_distance = apply(crimes_dist,1,min)
+
+#Plot a histogram: 
+
+hist(
+  min_distance,
+  breaks = 40,
+  col = "gray",
+  xlab = "Euclidean Distance",
+  main = "Distance to Nearest Violent Crime"
+)
+
+```
+
+The distribution looks like the way it does because there is a even spread of violent crimes across the map and that causes the distances between violent crimes and non-violent crime to be low.
+
+## 2. Identifying Cholera Infection Hotspots
+
+The dataset `cholera.csv` contains the location of cholera cases during an outbreak (the sample was collected over one month). Your job is to identify cholera hotspots so that public health workers can figure out where the pathogens are coming from. To do this, you will have to estimate the intensity of cholera cases over the entire region (for values of x ranging from 0-10 and values of y ranging from -10 to +10, so the area of the region is 200).
+
+We will not directly use either the quadrat or kernel estimation techniques that we learned in class. Instead, we'll use a simple hybrid of the two. Imagine drawing a grid with lines at each integer value in x and at each integer value in y (this looks like a normal grid). We will go to each location $\overrightarrow{\underset{\cdot}{s}}$ where these lines intersect and we will construct an estimate for the rate at which cholera cases arise (the infection rate) at that location $\lambda(\overrightarrow{\underset{\cdot}{s}})$ by using a kernel estimate.
+
+The kernel we'll use is sometimes called the "uniform kernel" because it assigns all observations uniform weight so long as they are within a certain cutoff distance $h$ (the cutoff distance is the bandwidth for this particular kernel). Imagine that we are standing at a point $\overrightarrow{\underset{\cdot}{s}}$, a lattice point on our grid. We draw a circle of radius $h$ around our location. If any events occur within that circle, we count those events and assign them to our location $\overrightarrow{\underset{\cdot}{s}}$ as an infection. However, because the infection rate $\lambda(\overrightarrow{\underset{\cdot}{s}})$ describes $\frac{infections}{area}$, we must adjust this count for the area we are examining. In the case of this uniform kernel, the area we examine covers $\pi \times h^2$ with uniform weight, so we divide our infection count by this area to compute the rate of infection per unit area. We'll look for infection hotspots by plotting these infection rate estimates in a bubble plot, with larger bubbles depicting higher infection rates.
+
+### 2.1 Computing infection rates
+
+Begin by making sure that you understand the procedure. We will look at the set of points $\overrightarrow{\underset{\cdot}{s}}=[x,y]$ where we use each pairwise combinations from the two sets $$x \in \{0,1,2,3,...,10\}$$ $$y \in \{-10,-9,-8,...,10\}$$ You may want to draw this grid on scrap paper. For each $\overrightarrow{\underset{\cdot}{s}}$, we compute the Euclidean distance to the location of each cholera infection in the dataset. We then generate a new vector that is the weighted count of infections for $\overrightarrow{\underset{\cdot}{s}}$, where the weights are determined by each infection site's distance from $\overrightarrow{\underset{\cdot}{s}}$. The weights are determined by the kernel function, which in this case is the uniform kernel:
+
+$$
+\kappa_{unif}\left(\frac{dist(\overrightarrow{\underset{\cdot}{s}}, \overrightarrow{\underset{\cdot}{s_{inf\_site}}})}{h}\right)=\mathbf{1}\left[ \left(\frac{dist(\overrightarrow{\underset{\cdot}{s}}, \overrightarrow{\underset{\cdot}{s_{inf\_site}}})}{h}\right) < 1 \right] \times \frac{1}{\pi}
+$$
+
+Where $dist(\cdot)$ is the distance function, $\overrightarrow{\underset{\cdot}{s}}_{inf\_site}$ is the site of an infection event and $\mathbf{1}[\cdot]$ is the indicator function that takes the value of one if the statement in brackets is true. All this equation says is that an infection event is given a weight of one if its distance to the lattice point is less than $h$ (or equivalently that the distance divided by $h$ is less than one). The factor $\frac{1}{\pi}$ is just there to account for the circular structure of the area we are examining, as described above. (Hint: you may want to draw the shape of this kernel function on a sheet of scrap paper, where the horizontal axis is the distance from $\overrightarrow{\underset{\cdot}{s}}$ and the vertical axis is $\kappa$). Just like normal kernel estimation that we covered in class, we then estimate the infection rate at $\overrightarrow{\underset{\cdot}{s}}$ by summing up these weighted values for all of the infection sites, which we index by $j$: $$
+\hat{\lambda}(\overrightarrow{\underset{\cdot}{s}}) = \sum_{j=1}^{N}\left[ \frac{1}{h^{2}}\times \kappa_{unif}\left(\frac{dist(\overrightarrow{\underset{\cdot}{s}}, \overrightarrow{\underset{\cdot}{s_{inf\_site\;j}}})}{h}\right)\right]
+$$ which after subsitution and a little simplification looks less intimidating: $$
+\hat{\lambda}(\overrightarrow{\underset{\cdot}{s}}) =\frac{1}{\pi h^{2}} \times \sum_{j=1}^{N} \mathbf{1}\left[ dist(\overrightarrow{\underset{\cdot}{s}}, \overrightarrow{\underset{\cdot}{s_{inf\_site\; j}}})< h \right]
+$$ The estimate for the infection rate at a location is just sum of several 1's and 0's, scaled by the area of a circle. The main challenge is to figure out which infection events to count as a 1 and which to count as a 0, which we do by measuring the distance to each event.
+
+Write a script that estimates $\hat{\lambda}(\overrightarrow{\underset{\cdot}{s}})$ at each lattice point using the approach above. Some tips:
+
+-   You should write your script so that the bandwidth variable `h` is defined once and only once, and you then just refer to this variable at subsequent points in the script (so you can easily change the bandwidth). In your first run, use `h=2`. This means we assign an infection to a lattice point if it's less than 2 units away.
+-   In R you can get the constant $\pi$ by just typing `pi`. In your code, you can use `pi` as if it were a variable.
+-   Use the function to compute distances that you wrote for problem 1, and thank your past self for writing a generalizable function!
+-   In order to use the function that you wrote, you need to represent your lattice point coordinates in a certain format. Think about what form of input the function takes in, and how to construct that input. You may want to use the `meshgrid` function from the `pracma` library and the `c()` function.
+-   By default, logical and arithmetic operators in R are executed on each element of a matrix/array, rather than on the entire matrix as a whole (matrix multiplication and exponentiation are also operations that R performs, but you need to call other functions to do that). If you use these element-wise operations, R returns a matrix that is the same size as the original. For example, if you type `a > 0`, R will check each element of `a` and give this element a value of `True` if it is positive and `False` otherwise. If `a` and `b` are vectors, matrices or arrays of the same size, then `a * b` means R should multiply the first element in `a` by the first element in `b` and return this value into the first element of the new vector, matrix or array. It will then multiply the second element in `a` by the second element in `b`, and so on. If you type `a^2`, then each element in `a` is squared, rather than the entire matrix being matrix-multiplied against itself.
+
+```{r}
+# TODO: YOUR CODE HERE: LOAD DATA, CONSTRUCT THE GRID, COMPUTE DISTANCES
+
+#install.packages("pracma")
+library(pracma)
+#load data 
+cholera = read.csv("cholera.csv")
+#set variables
+h = 2
+x_vals = 0:10
+y_vals = -10:10
+
+grid = meshgrid(x_vals, y_vals)
+
+grid_x = c(grid$X)
+grid_y = c(grid$Y)
+
+# compute distances 
+dist_mat = compute_distances(
+  src_x  = grid_x,
+  src_y  = grid_y,
+  dest_x = cholera$cholera_x,
+  dest_y = cholera$cholera_y
+)
+
+# Equation
+within_h = dist_mat < h
+
+counts = rowSums(within_h)
+
+lambda_hat = (1 / (pi * h^2)) * counts
+
+# putting it into a dataframe
+infection_rate = data.frame(
+  x = grid_x,
+  y = grid_y,
+  lambda_hat = lambda_hat
+)
+
+infection_rate_nonzero = infection_rate[infection_rate$lambda_hat > 0, ]
+
+```
+
+### 2.2 Plotting infection rates
+
+Once you have computed the infection rate at all the lattice points, plot it them as bubble plot map. If a lattice point has a non-zero infection rate, plot a red dot. We want to make the dot larger where there are more infections, so we tell R to set the marker size property to be proportional to `lambas`. Adjust the aesthetics of the graph to make it readable. Hint: you can specify `size` as part of the aesthetics in the `geom_point` `aes` command.
+
+Overlay the locations of the actual infection events using a different marker (that doesn't change size). **Do you think this approach identifies the spatial distribution of infection risk well?**
+
+```{r}
+### TODO YOUR CODE HERE
+
+library(ggplot2)
+
+ggplot(infection_rate_nonzero, aes(x = x, y = y)) +
+  geom_point(aes(size = lambda_hat), col = "blue") +
+  labs(
+    title = "Cholera Infection Rates",
+    x = "x coords",
+    y = "y coords" 
+  )
+
+
+
+```
+
+No, this approach doesn't identify the spatial distribution of infection risk well. It does show that cholera is clustered around a certain area but is sensitive to the choice of bandwidth and lattice resolution, and the uniform kernel produces abrupt changes in risk at distance.
+
+### 2.3 Changing bandwidths [OPTIONAL]
+
+Rerun your code, but change the bandwidth to `h=1`. Rerun it again but use `h=3`. Plot both of these maps. **How do your three estimates for infection rates compare? Why? What is the advantage or disadvantage of using a larger bandwidth? Do the different bandwidths identify the same infection hotspots?**
+
+```{r}
+### TODO YOUR CODE HERE for h=1 [OPTIONAL]
+
+
+
+```
+
+```{r}
+### TODO YOUR CODE HERE for h = 3 [OPTIONAL]
+
+
+```
+
+[TODO: ANSWER THE QUESTIONS HERE]
+
+## 3. Simulating Poisson Point Processes
+
+Here you will generate synthetic data that will simulate a Poisson point process (PPP). You'll then compute the K-function for several of your simulations to evaluate the clustering of data in a Poisson point process.
+
+### 3.1 Calculating lambda
+
+Consider the space $0<x<10$ and $0<y<10$. This space has an area of 100. Suppose we have a homogenous PPP that generates 120 events on average over this area. **What is** $\lambda$**? What does this number mean?** (Hint: λ has units of events / area).
+
+[TODO: Answer the question here]
+
+### 3.2 Simulating the PPP
+
+Since the total number of events $z$ must follow a Poisson distribution, draw a random number from this distribution. Since the expected number of events is 120, draw the random variable $z$ using the function from a Poisson distribution with a mean value of 120 (hint: use `rpois`, and avoid getting confused by the use of "lambda" to mean different things in different settings).
+
+The location of these z events are completely random over the area we are considering, so we can draw their x and y locations from a uniform distribution that goes from 0 to 10. Since x and y are uncorrelated, draw these random variables (actually vectors) separately with the function `runif`. We now have the locations of observations for a single simulated realization of our PPP. Plot the observations from this realization.
+
+Repeat this process 3 times. Each time you will draw a new value for z, x and y. **How do they compare to one another? Are you surprised?**
+
+```{r}
+### TODO read, understand and run the code here:
+
+#Set the seed to get consistent (random) output
+set.seed(123)
+#repeat 3 times
+ggList = list()
+for(i in 1:3){
+  #Draw the number of events from the poisson distribution
+  z = rpois(1,120)
+  #Draw the location of the events uniformly across space
+  x = runif(z,0,10)
+  y = runif(z,0,10)
+  df = data.frame(x,y)
+  ggList[[i]] = ggplot(data = df) + geom_point(aes(x,y)) + ggtitle("A Poisson Point Process")
+}
+
+#Plot them
+plot_grid(ggList[[1]],ggList[[2]],ggList[[3]])
+
+```
+
+Each poisson point process generates a different number of points and and are randomly scattered among the x and y. There is no clustering, no interaction, and no spatial pattern beyond chance.
+
+### 3.3 The K-function
+
+Write a script to compute the K-function for one of these realizations (or a new one). The procedure you will use is closely related to the calculations you did in the cholera example above, although there are some important differences.
+
+-   One difference is that you will be computing the distance from each observation to all other observations, rather than the distance from a lattice point to all other observations. The formula is as below $$\hat{K}(h) = \frac{1}{z\lambda}(\sum_{i=1}^z \sum_{j \neq i} \mathbf{1}\{D(\overrightarrow{\underset{\cdot}{s_i}}, \overrightarrow{\underset{\cdot}{s_j}}) < h\})$$
+-   Another difference is that you will average your results over all points (why there is a double summation instead of just one) and output a graph of $K(h)$. Your final results is not a map but a function $K$ defined over distances $h$.
+-   For more on computing the K-function, see Lloyd 7.4.2.
+
+Compute $K(h)$ for the integer values of $h=\{1,2,3...,7\}$. You don't need to try and compute every value in between. You can plot the K-function as a line, which will interpolate between points for you. Overlay on this figure a plot of ${\pi \times h^2}$ using a different color (recall that this is the expected K-function for a PPP). How do they compare and why?
+
+Notes: What we've done in the above blocks is copy-pasting lots of code. Copy-pasting code is in general a bad practice and is strongly discouraged: (1) What if you want to change something about your code (e.g., you realized later on that there is a bug somewhere)? You would need to fix it multiple times. (2) What if someone else (most likely your future self) wants to read your code and understand what you were doing? They would then have to read the same block of code over and over again (and wonder about whether there are small changes made to each copy).
+
+What is encouraged, then, is to write functions. Functions keep your code organized, easy to maintain, and recyclable. In earlier labs like this we will be nudging you to write functions by writing the docstrings for you, and in later labs we expect that you will be writing functions on your own.
+
+For plotting the two lines with different colors and labeling them appropriately in ggplot2, the `scale_color_manual` function might be useful.
+
+```{r}
+K = function(h, new=TRUE, z=NA, x=NA, y=NA, area = 100, lambda = 1.2) {
+  # Calculates the K function for different bandwidths.
+  # Args:
+  #    h: an array of bandwidths.
+  #    new (bool): whether a new simulation should be carried out.
+  #        if False, x, y, z arguments need to be supplied.
+  #    z: number of events in a realization of the simulation
+  #    x, y: arrays containing x, y coordinates of the events.
+  #    area: area of region considered
+  #    lambda: expected events per unit area
+  
+  # Returns:
+  #    an array of K(h), of the same length as h.
+  
+  # TODO: COMPLETE THIS FUNCTION
+  
+  # These bool inputs (flags) control the behavior of the function
+  # allowing you to write functions that, for example,
+  # take different kinds of input
+  if(new){
+      z = rpois(n = 1, lambda = area*lambda)
+      x = runif(z,0,10)
+      y = runif(z,0,10)  
+  }
+  
+  distance = compute_distances(x,y,x,y)
+  
+  # j!=i
+  off_diag = row(distance) != col(distance)
+  
+  # store K(h)
+  K = numeric(length(h))
+  
+  # equation
+  for (k in h) {
+    indicator = (distance < h[k]) & off_diag
+    K[k] = (1 / (z * lambda)) * sum(indicator)
+  }
+  
+  
+  return(K)
+}
+```
+
+```{r}
+###TODO YOUR CODE HERE
+#Plot the results:
+
+h_vals = 1:7
+K_hat = K(h_vals)
+K_exp = pi * h_vals^2 
+
+df = data.frame(
+  h = rep(h_vals, 2),
+  K = c(K_hat, K_exp),
+  type = rep(c("K(h)", "πh²"), each = length(h_vals))
+)
+
+ggplot(df, aes(x = h, y = K, col = type)) +
+  geom_line() +
+  geom_point() +
+  scale_color_manual(values = c("red", "blue")) +
+  labs(x = "h",y = "K(h)")
+
+
+```
+
+The k-function at first matches the expected k-function but after a while the expected k-function increases exponentially and the k-function does not. This is because the k-function is from a simulation and can fluctuate above or below the expected k-function.
+
+### 3.4 Multiple simulations
+
+Now expand your script to simulate the PPP fifty times and calculate the K-function each time. Plot all 50 estimates for $K(h)$ on a single plot using a single color. Again, overlay on this figure a plot of $\pi \times h^2$ using a different color. **How do they compare and why?**
+
+Hint: I recommend making one "long" dataframe by using `rbind` to stack a bunch of dataframes together that each contain values of h, K_h, and Expected_K_h, for a given simulation. You can also have a variable in the dataframe to keep track of the simulation number, maybe you'll call that "Run". If you set up the data this way then you can plot 50 simulations in a single line using the `group` option in `aes`. For example: `geom_line(aes(h, K_h, col = "Estimated K_h", group = Run), alpha = 0.3)`. Here, the `alpha` makes the lines slightly translucent. Note that `alpha` is not a function of the data columns so it goes outside the `aes`.
+
+```{r}
+### TODO YOUR CODE HERE
+
+All = data.frame()
+n_runs = 50
+
+for (r in 1:n_runs) { 
+  
+  K_hat = K(h_vals, new = TRUE)
+  
+  K_exp = pi * h_vals^2
+  
+  # store results for this run
+  df_run = data.frame(
+    h = h_vals,
+    K_h = K_hat,
+    Expected_K_h = K_exp,
+    Run = r
+  )
+  
+  All <- rbind(All, df_run)
+}
+
+ggplot(All, aes(x = h)) +
+  geom_line(
+    aes(y = K_h, group = Run, col = "K(h)"),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(y = Expected_K_h, col = "πh²"),
+    linewidth = 1.2
+  ) +
+  scale_color_manual(
+    values = c("K(h)" = "red", "πh²" = "blue")
+  ) +
+  labs(
+    x = "h",
+    y = "K(h)",
+    col = ""
+  ) 
+```
+
+There is variation arises from randomness in the number and locations of points so each PPP is different and unique in it own way. The expected K(h) is above the all the PPP because it is a expected outcome and not a simulated outcome.
+
+### 3.5 Estimating K(h) for the Cholera Data
+
+We now want to test if the cholera data, used in section 2 above, is more or less clustered than a PPP. Compute the K-function for the cholera data at the same values for ℎ. Plot this K-function overlaid with your earlier plot of 50 K-functions from the simulated PPP (using a third color). **Does the cholera data look more, less or similarly clustered to the PPP data?** Refer to your map of the cholera data to check whether your interpretation makes intuitive sense or not.
+
+Hint: you'll need to calculate and specify the area and lambda for the cholera example.
+
+```{r}
+### YOUR CODE HERE
+
+area_cholera = 100
+z_cholera = nrow(cholera)
+lambda_cholera = z_cholera / area_cholera
+
+K_cholera = K(h_vals,FALSE,z_cholera,cholera$cholera_x,cholera$cholera_y,area_cholera, lambda_cholera)
+
+df_cholera <- data.frame(h = h_vals,K_h = K_cholera,Expected_K_h = NA,Run = "Cholera",type = "Cholera")
+
+All$type = "PPP"
+
+k_plot <- rbind(
+  All[, c("h", "K_h", "type", "Run")],
+  data.frame(
+    h = df_cholera$h,
+    K_h = df_cholera$K_h,
+    type = "Cholera",
+    Run = "Cholera"
+  )
+)
+ggplot() +
+  geom_line(
+    data = All,
+    aes(h, K_h, group = Run),
+    color = "grey",
+    alpha = 0.3
+  ) +
+  geom_line(
+    data = data.frame(h = h_vals, K = pi * h_vals^2),
+    aes(h, K),
+    color = "blue",
+    linewidth = 1.2
+  ) +
+  geom_line(
+    data = df_cholera,
+    aes(h, K_h),
+    color = "red",
+    linewidth = 1.4
+  ) +
+  labs(
+    x = "h",
+    y = "K(h)"
+  )
+```
+
+The Cholera data is more clustered because it is on the lower end of the graph. This result is consistent with the cholera map, which shows clear spatial clustering of cases around specific locations rather than a uniform random distribution.
+
+### Congratulations!
+
+You finished the lab! Please list everyone you worked with on this assignment here:
+
+[TODO: list anyone you worked with]

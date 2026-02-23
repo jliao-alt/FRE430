@@ -1,0 +1,270 @@
+---
+title: 'Lab 1: Orientation'
+output:
+  html_notebook: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+## FRE 430 Spatial Data Science
+
+##### Instructor: Jonathan Proctor
+
+##### Teaching Assistant: Bhavita Ragoo
+
+##### About this lab:
+
+-   Due date Jan. 13th, 2026 at 9:30am.
+
+-   You may talk with other students about the lab, but each student is responsible for doing all exercises in the lab themselves and turning in their own write up. We will be checking code for evidence of copying and pasting.
+
+-   This is a newly developed assignment, so if you think there is an error or something is unclear, let us know right away. That will be extremely helpful to us and your fellow students.
+
+-   Submit your lab as both LASTNAME.html and LASTNAME.Rmd on canvas. Please re-run the entire notebook, as needed, prior to submitting to make sure the results show the output from the existing code.
+
+-   Thanks to Solomon Hsiang for sharing some materials for this lab.
+
+## Objectives:
+
+The goal of this lab is to get you familiar with running R code and using [R Markdown](http://rmarkdown.rstudio.com) Notebooks. You will learn to create variables, install and load libraries, and manipulate vectors, matrices and arrays.
+
+### Getting familiar with R Markdown Notebooks:
+
+R Markdown Notebooks make it easy to combine code and text in a single document. It's great for homework assignments like this. Notebooks have two types of content: text (like this) and code (the grey chunks below). When you execute code within the notebook, the results appear beneath the code.
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*.
+
+```{r}
+#Create an x variable
+x = 1:50
+#Create y as a function of x
+y = 8 + 2*x + rnorm(50)*5
+#Plot the result
+plot(x,y)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar (the green box with the C and plus sign) or by pressing *Cmd+Option+I*. Or you can type ```` ```{R} ```` to begin an R code chunk and then add ```` ``` ```` to end the chunk. Create a new chunk below. In that chunk create a new variable, y2, that is a function of x, and plot it against x.
+
+```{r}
+### TODO: Write your code here
+
+y2 = 30 - x + rnorm(50)
+
+plot(x,y2)
+
+```
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). It can be nice to use the "Visual Editor" when writing, since it's easier to look at than the "Source Editor". To switch between the two click the "Source" or "Visual" tabs in the upper left corner of the screen. Or in settings (the gear to the right of the preview button) click "Use Visual Editor".
+
+The preview shows you a rendered HTML copy of the contents of the editor. *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed. Thus, I encourage you to re-run the entire notebook before submitting your lab. This can be done by clicking "Run" in the toolbar and then selecting the "Run All" option.
+
+You will generally submit labs both an R Markdown Notebook and an associated html file, but if you would like a pdf of your assignment, you can open the html file created when you save your project, and then export that to a pdf using an internet browser like Google Chrome.
+
+### Working with vectors, matrices and arrays
+
+Data are stored in R in many formats including vectors, matrices and arrays. Vectors are 1 dimensional, matrices are 2 dimensional and arrays can by any number of dimensions. All three can contain only a single data type (e.g., characters or numbers) at a time. In future labs we will work with data structures that can hold many types of data, such as dataframes and lists. The slides [here](http://stanford.edu/~jgrimmer/RDataManagement.pdf) provide provide an additional introductory resource for R data types. Below are some examples creating different R data objects:
+
+```{R}
+# create a scalar value: 
+s = 5
+
+# create a vector: 
+v = c(1,2,3)
+
+# create a matrix: 
+m = matrix(c(5,6,7,10,11,12), nrow = 2, ncol = 3)
+print(m)
+```
+
+**Todo:** Create a 3 (rows) by 2 (columns) matrix using the elements of v. Note that vectors can be concatenated together using the c() function.
+
+```{r}
+### TODO: Write your code here
+
+m1 = matrix(c(v,v),nrow = 3,ncol = 2)
+print(m1)
+```
+
+**Todo:** Add the vector v to the matrix m:
+
+```{r}
+### TODO: Write your code here
+v+m1
+```
+
+**Question**: What happened when you added the vector of length 3 to the 2x3 array? Which elements of v were added to m? (Hint: try creating a matrix of the same shape as m using the values of v. Also try adding a vector of length 4 to m and check out the warning message). Note that R doesn't throw an error message here, and this type of flexibility can lead to erroneous output if we're not careful.
+
+```{r}
+m
+v+m
+m2 = matrix(c(v,v),ncol = 3, nrow = 2, byrow = TRUE)
+m2
+v1 = c(1,2,3,4)
+v1+m
+```
+
+**Answer**: **TODO**: write your answer here.
+
+R takes the vector with the length of 3 and repeats it when adding it to the matrix. All elements of the vector were added to m, added by element by element, column down.
+
+[1,1] - 5+1
+
+[1,2] - 6+2
+
+[2,1] - 7+3
+
+[2,2] - 10+1
+
+[1,3] - 11+2
+
+[2,3] - 12+3
+
+We can select elements of a matrix using indices. Here are a few examples:
+
+```{r}
+# first row thrid column:
+m[1,3]
+#all elements of the first row:
+m[1, ]
+#all elements of the second column: 
+m[ ,2]
+#the second and third elements of the second row: 
+m[2,c(2,3)]
+```
+
+**Todo:** Use code to add the first and third elements of the first row of m to the first and second elements of the second column of m. The output should be of length 2.
+
+```{r}
+### TODO: Write your code here
+
+m[1,c(1,3)]+m[c(1,2),2]
+```
+
+You can also change selected values of a matrix:
+
+```{r}
+#Change the second row of m to all have the value 99:
+m[2,] = 99
+print(m)
+```
+
+### Storing variables
+
+The computer stores or "remembers" variables in things called "environments". Generally, variables you create will be stored in the "Global environment". To see what's in the environment, you can use the command "ls()".
+
+```{R}
+ls()
+```
+
+You can also see the variables in the environment in RStudio by clicking the environment tab (next to history, connection, and tutorial).
+
+**Todo:** Change the value of myFirstWord to your best guess of what the first English word you learned was. Notice how the value was populated in the environment.
+
+```{r}
+myFirstWord = "mama"
+```
+
+You can clear variables from the environment using the rm() function.
+
+```{r}
+#For example:
+rm(myFirstWord)
+```
+
+**Todo:** Combine the rm() and ls() functions to clear all variables from the environment. You'll need to use the "list" option within the rm function. For details on this type ?rm into the console -- we discuss this further below.
+
+```{r}
+### TODO: Write your code here
+rm(list=ls())
+```
+
+### Installing and loading packages
+
+R has a bunch of built in functions. Like matrix() and c() and ls() and rm() that we've seen so far. You can learn more about any function using the ? command (e.g., try typing ?ls into the console). The console is a place, usually at the bottom of your screen by default, where you can type and run lines of code directly. Running code from the code chunks and typing code into the console is the same, except that the code chunks give you the ability to track and save what you've written.
+
+R by default does not have all the packages you could ever want. In many instances you will want additional functionality. You can gain access to new functions by installing packages. To use new packages they need to be installed (once) and then loaded (each time you start R).
+
+Let's try installing a package commonly used for plotting called ggplot2.
+
+```{r}
+# Uncomment the line below and run it:
+install.packages("ggplot2")
+```
+
+Once this is installed you can load the library:
+
+```{r}
+library(ggplot2)
+```
+
+And then make a plot with the results (below). We'll explore the functionality of ggplot2 more in future labs. If you're interested in learning more now, type ?ggplot2 into the console and check out the results.
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Simulate data
+n = 50
+x = rnorm(n)
+y = 2 * x + rnorm(n)
+
+# Create a data frame
+data = data.frame(x = x, y = y)
+
+# Plot using ggplot2
+ggplot(data, aes(x = x, y = y)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +  # Add a linear regression line
+  labs(title = "Simulated Data and Linear Regression Line",
+       x = "X-axis",
+       y = "Y-axis")
+```
+
+### Making our first map
+
+Let's make a map of four key spots on the Vancouver campus. Specifically let's map the Thunderbird Arena, UBC Hospital, UBC Aquatic Center, and the Walter Koerner Library. To get the locations of these areas we will be doing what is typically called a geocoding API (Application Programming Interface) request. This is where you put in an address (or some other sort of query keywords) and get the spatial coordinates. You do this on a daily basis when you type an address into Google Maps and find the latitude and longitude of that place.
+
+The geocoding API that we'll use is [OpenStreetMap](https://www.openstreetmap.org/#map=3/71.34/-96.82). It's like Google Maps but with an easier to use API. Below, I've written code to set up and perform an API request for the "Vancouver thunderbird arena" using the httr2 package. You'll need to install the package (un-comment and run the first line) before running the code below. After running, re-comment the `install.packages` line so you don't install the package multiple times if you re-run the code later.
+
+```{r}
+#install.packages("httr2") #Uncomment to install the httr2 package
+library(httr2) #The httr2 package helps you interact with web APIs. 
+#Set up a request by providing the base URL of the API
+req = request("https://nominatim.openstreetmap.org/search")
+#Pass in some user information needed by the API (feel free to change to your email)
+req = req_headers(req, `User-Agent` = "MyGeocoder/1.0 (jonnp91@yahoo.com)")
+#Pass in what you want the API to search for -- i.e., what you want to georeference
+#--- This is the line you will need to change to search for other places ---#
+req_thunderbird = req_url_query(req, q =  "79-1019 Haukapila St, Kealakekua, HI 96750, United States", format = "geojson")
+#Perform the request (like typing "Vancouver thunderbird arena" into google maps and pressing enter)
+resp = req_perform(req_thunderbird)
+#Extract results from the response
+geojson = resp_body_string(resp)
+#Print the raw GeoJSON
+cat(geojson)
+```
+
+You don't need to understand the details of the code above, but if you are interested, [this video](https://www.youtube.com/watch?v=8tilyqp4bZY) will give you a better sense of what's going on. The goal of this exercise is to teach you that APIs exist, and that you can call them from R, but not to get into the weeds of how they work. If you want to use an API for your final project, you can go more deeply into how they work then.
+
+The API request returns a GeoJSON, which is a data format that contains spatial information and attributes about a place. From this, we can manually extract the latitude and longitude, and use that to plot the Thunderbird Arena using the following code:
+
+```{r}
+plot(-123.24164980042525, 49.260018450000004, xlim = c(-123.27, -123.23), ylim = c(49.255, 49.27), pch = "T", xlab = "Longitude", ylab = "Latitude")
+```
+
+**Todo:** Following this example, finish the plot of the Thunderbird Arena, UBC Hospital, UBC Aquatic Center, and the Walter Koerner Library. You can add points to an existing plot using the points() function. The argument pch determines what symbol is plotted -- choose one for each item.
+
+To query the API for new places, the line in the above code you need to modify is `req_thunderbird = req_url_query(req, q = "Vancouver thunderbird arena", format = "geojson")`. Change "Vancouver thunderbird arena" to a different search term to search for a different place, like the "UBC hospital". Then re-run the API request and add the new location to your map. You can do this manually for now; though note that this code could be extended to automatically geolocate hundreds or thousands of locations!
+
+Notes: You may need to make your search terms more specific if other items in Open Street Maps have similar names. If you run into an issue where your plot is not showing up in the preview, you can set "echo = TRUE" when defining the chunk -- i.e., {r, echo=TRUE} rather than just {r}.
+
+```{r, echo=TRUE}
+### TODO: Write your code here
+plot(-123.24164980042525, 49.260018450000004, xlim = c(-123.27, -123.23), ylim = c(49.255, 49.27), pch = "T", xlab = "Longitude", ylab = "Latitude")
+points(-123.2457970,49.2641366, pch = "H")
+points(-123.2554671,49.2663222, pch = "L")
+points(-123.2493492,49.2673326, pch = "A")
+```
+
+Good job! You've completed the first coding lab. Please submit your lab by uploading it to Canvas as YOURLASTNAME.Rmd and YOURLASTNAME.html. Remember to re-run the full notebook if needed prior to submission.
