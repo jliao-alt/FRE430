@@ -1,0 +1,389 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## FRE 490 Spatial Data Analysis and Remote Sensing
+
+##### Instructor: Jonathan Proctor
+
+##### Teaching Assistant: Bhavita Ragoo
+
+##### About this lab:
+
+-   Due date March 12th, 2026 at 9:30am.
+
+-   This is a longer lab, and worth 6 points instead of 3, but you have 2 weeks to work on it. I recommend starting early and finish part 1 the first week and part 2 the second week. Please use me and Jeremy as a resource if you get stuck.
+
+-   You may talk with other students about the lab, but each student is responsible for doing all exercises in the lab themselves and turning in their own write up. We will be checking code for evidence of copying and pasting.
+
+-   This is a newly developed assignment, so if you think there is an error or something is unclear, please let us know right away. That will be extremely helpful to us and your fellow students.
+
+-   Submit your lab as both LASTNAME.html and LASTNAME.Rmd on canvas. Please re-run the entire notebook, as needed, prior to submitting to make sure the results show the output from the existing code.
+
+### Objectives:
+
+In this lab you will gain experience remotely sensing crop yields and using those values in statistical analysis of agricultural productivity and climate change.
+
+### Setup
+
+Install and load necessary packages:
+
+```{r}
+rm(list = ls())
+library(maps)
+library(raster)
+library(ggplot2)
+library(ggthemes)
+library(stargazer)
+library(pracma)
+library(lfe) #used only in an optional part of the assignment
+```
+
+## Estimating yield and yield sensitivities to weather and climate in data poor regions
+
+The Food and Agricultural Organization of the United Nations releases national-level crop yield data each year. While incredibly useful, the coarse resolution of this data limits understanding of how weather and climate influence agricultural productivity in many regions. They've asked you to explore whether satellite data might be useful for quantifying yield and yield sensitivities to temperature and soil moisture shocks in data poor regions of the world. While fine-resolution records of crop yields exist in many, typically rich, regions of the world, poorer regions tend to have less complete and resolved measurements of agricultural productivity. This limits our understanding of crop sensitivities to changes in weather and climate in some of the areas where such information is, arguably, most important. Understanding such sensitivities is critical, given that many poorer regions depend on agriculture as a primary source of income.
+
+To overcome this data-availability challenge you aim to leverage satellite-based measurements of crop yield. While there are many vegetation indices, we'll focus on solar induce fluorescence (SIF) in this exercise due to its direct connection with photosynthesis. Further, it is a relatively new type of measurement -- making surprises and discoveries more likely.
+
+Solar induced chlorophyll fluorescence (SIF) is a measurement of light that is emitted by plants as a by-product of photosynthesis. When the plants absorb light, some is used to produce sugars, but some is also re-emitted as reddish light. This is the light that the SIF satellites measure, and that we can use to measure photosynthesis. Unlike other vegetation indices like NDVI, SIF responds nearly instantaneously to plant stress -- such as from water or temperature limitation. This makes it an ideal candidate for our current study. For more information about SIF, see here: <https://eo4society.esa.int/projects/sentinel-5p-innovation-solar-induced-chlorophyll-fluorescence-sif/>.
+
+Throughout this lab, you'll be using a few different datasets. The units for each dataset are described below:
+
+-   solar-induced chlorophyll fluorescence from GOME-2 (monthly average from 2007-2018), units [mW/m\^2/nm/sr]
+
+-   soil moisture from the European Space Agency Climate Change Initiative (monthly average from 2007-2018), units [cm\^3 / cm\^3]
+
+-   maximum daily temperature from the Climate Prediction Center (monthly average from 2007-2018), units [C]
+
+-   yield = annual wheat yield reported by Food and Agricultural Organization of the United Nations, units [hg/ha]; 10\^4 hg is 1 metric ton.
+
+-   wheat cropped area = distributed harvest area from Monfreda et al. (2008), units [ha]
+
+## 1. Predict wheat yield in Morocco with SIF observations from GOME-2
+
+Your first task is to build and evaluate a model to predict national wheat yields in Morocco using SIF. To do this you will need to:
+
+1.  Load the yield data, SIF data, and cropped area data.
+
+    ```{r}
+    #Load raster stack for SIF 
+    sif = stack("data/GOME2_SIF_Morocco.grd")
+
+    #Load cropped area raster
+    cropped_area = raster("data/Cropped_Area_Wheat_Morocco.grd")
+
+    #Load national FAO yield data
+    yield_FAO = read.csv("data/Morocco_wheat_yield_2007_2018.csv")
+    ```
+
+2.  Create cropped-area averaged SIF values nationally for each year. This involves temporally averaging from monthly to annual resolution and spatially averaging from the pixel resolution to the annual resolution, weighting by cropped area.
+
+    ```{r}
+    #Average sif data, weighting by cropped area, to the annual level
+    sif_years = rep(2007:2018, each=12)
+    sif_months = rep(1:12, length(2007:2018))
+
+    #For each year
+    annual_sif = c()
+    for(yr in 2007:2018){
+      #Average over months of the year
+      yr_rast = raster::overlay(sif[[which(sif_years == yr)]], fun=mean)
+      
+      #Weighted average of raster based on cropped area
+      tmp = yr_rast * cropped_area
+      annual_sif = c(annual_sif, sum(tmp[], na.rm=T) / sum(cropped_area[], na.rm=T))
+    }
+    ```
+
+3.  Plot annual SIF and annual yields against time on the same graph with different colors. When doing so, first linearly detrend each time series and then divide each time series by its standard deviation (post detrending) to put the yield and SIF data in similar units. The `detrend` function from the `pracma` library will be helpful here. As will the `sd` function.
+
+    **Question**: How well do national satellite-based SIF values track national yield estimates from ground surveys?
+
+    ```{r}
+    #Make a data frame holding the yield and SIF data
+    d = cbind(yield_FAO, annual_sif)
+    #Define a function to detrend and divide by the standard deviation:
+    detrend_normalize = function(x) {
+      x_detrend = detrend(x)
+      x_normalized = x_detrend / sd(x_detrend)
+      return(x_normalized)
+    } 
+    #Plot
+    ggplot(data = d) + geom_line(aes(year, detrend_normalize(yield), color = "Yield")) + geom_line(aes(year, detrend_normalize(annual_sif), color = "SIF")) + theme_classic() + scale_color_manual(values = c("Yield" = "blue", "SIF" = "green")) + theme(legend.title=element_blank()) + xlab("Year") + ylab("Yield and SIF (Standardized)")
+    ```
+
+    SIF tracks annual yields quite well.
+
+4.  Use a linear regression (`lm`) to fit a model of detrended yields as a function of detrended SIF. No need to normalize by the standard deviation here because the regression coefficients will the scale the variables for us.
+
+    **Question**: What is the in-sample R2?
+
+    ```{r}
+    #Fit a linear model
+    d$yield_detrend = detrend(d$yield)
+    d$sif_detrend = detrend(d$annual_sif)
+    mod1 = lm(data = d, formula = yield_detrend ~ sif_detrend)
+    summary(mod1)
+    ```
+
+5.  Evaluate the out of sample performance using leave-one-out cross validation. To do so, write a function called "leaveOneOut" that intakes a `lm` model object and outputs the out-of-sample R2. Then apply that function to the model object.
+
+    **Hints:** begin by extracting the data used to train the model from the model object (`lmObject$model`). Then iterate through the dataset training a model on all but one point and predicting on the held-out point. Once you've predicted each point out-of-sample, calculate the R2 by comparing the predictions to the true values. Note that you can use `formula(model)` to extract the function specification of the model object passed into the function; this helps to retrain the model on the training data.
+
+    **Question**: How does the in-sample model fit compare with the out-of-sample model fit for this model?
+
+    ```{r}
+    #This function intakes a lm model object and returns R2
+    leaveOneOut = function(mod){
+      tmp_d = data.frame(mod$model)
+      
+      #For each point to be left out
+      error2 = c()
+      for(i in 1:nrow(tmp_d)){
+        #Split into train and test
+        train_d = tmp_d[-i,]
+        test_d = tmp_d[i,]
+        #Train a model using the same formula
+        tmp_mod = lm(data = train_d, formula = formula(mod))
+        #Predict held out point using the model
+        pred = predict(tmp_mod, test_d)
+        error2 = c(error2, (pred - test_d[,1])^2)
+      }
+      
+      #Calculate R2
+      RSS = sum(error2)
+      TSS = sum((tmp_d[,1] - mean(tmp_d[,1]))^2)
+      return(1 - RSS/TSS)    
+    }
+
+    #Apply the function to the model
+    print(paste0("Out-of-sample model R2 is: ", round(leaveOneOut(mod1),3)))
+    ```
+
+    The out-of-sample fit is slightly lower than the in-sample fit.
+
+6.  Above, you estimated yield as a linear function of SIF (a polynomial of order 1). Now you're going to select the optimal order of polynomial to relate SIF to yields. To do so, you will also estimate yield as a quadratic (order 2) and cubic (order 3) function of SIF and select the model that performs best of out sample. To do that, calculate the square of the detrended SIF values, and the cube of the detrended SIF values and then include them as regressors in the equation. Then calculate the in-sample and out-of-sample (i.e., leave-one-out) performance of all three models (i.e., the linear model, the quadratic model and the cubic model).
+
+    ```{r}
+    #Calculate the polynomial terms
+    d$sif_detrend2 = d$sif_detrend^2
+    d$sif_detrend3 = d$sif_detrend^3
+
+    #Estimate the quadratic and cubic models
+    mod2 = lm(data = d, formula = yield_detrend ~ sif_detrend + sif_detrend2)
+    mod3 = lm(data = d, formula = yield_detrend ~ sif_detrend + sif_detrend2 + sif_detrend3)
+
+    #Calculate their out of sample model performance using the leaveOneOut function
+    OOS_fit = c(leaveOneOut(mod1), leaveOneOut(mod2), leaveOneOut(mod3))
+
+    #Also Calculate their in sample model performance 
+    IS_fit = c(summary(mod1)$r.squared, summary(mod2)$r.squared, summary(mod3)$r.squared)
+    ```
+
+7.  To select the best model, plot out-of-sample model fit (y-axis) against the order of the polynomial (x-axis). Add to the graph a line showing in-sample fit (y-axis) against the order of the polynomial (x-axis).
+
+    **Question:** how do out-of-sample model fit and in-sample model fit change with increasing polynomial order? What is the optimal model?
+
+    ```{r}
+    #Plot
+    fit_df = data.frame("Poly_Order" = 1:3, OOS_fit, IS_fit)
+    ggplot(data = fit_df) + geom_line(aes(Poly_Order, OOS_fit, color = "OOS_fit")) + geom_line(aes(Poly_Order, IS_fit, color = "IS_fit")) + scale_color_manual(values = c("OOS_fit" = "blue", "IS_fit" = "black")) + theme_classic() + theme(legend.title=element_blank()) + ylab("Model performance (R2)") + xlab("Model Polynomial Order") + ggtitle("In-Sample vs Out-of-Sample Model Fit")
+    ```
+
+In sample fit increases with polynomial order; out of sample fit decreases. Out of sample model performance is highest for the linear model indicating that the relationship is linear.
+
+## 2. Estimate the sensitivity of Moroccan wheat yields to soil moisture and temperature
+
+You've shown that SIF correlates quite well with yield. Now you can use model predictions of yield using SIF to estimate how yield changes with temperature and soil moisture, leveraging the fine-resolution of the SIF data. You'll do this first using the annual time series of observed yields and predicted yields. You'll then estimate a cross-sectional regression analyzing differences in predicted yields, temperature and soil moisture across space. And finally, you'll estimate a panel model leveraging the fine temporal and spatial resolution of the SIF and weather data.
+
+### 2.1 Time-series model
+
+To learn the relationship between yield, temperature and soil moisture, regress detrended yield against detrended temperature and soil moisture. Do this with both survey-based yield as well as SIF-predicted yield. To do so, implement the following steps:
+
+1.  Predict annual yield using SIF, with the linear (polynomial order 1) model trained in part 1.
+
+    ```{r}
+    #Predict annual yield using SIF
+    d$yield_detrend_predSif = predict(mod1)
+    ```
+
+2.  Average maximum temperature (tmax) and soil moisture (sm) data to the annual level the same way you did for SIF, weighting by cropped area
+
+    ```{r}
+    #Temperature
+    tmax = stack("data/CPC_TMAX_Morocco.grd")
+    annual_tmax = c()
+    for(yr in 2007:2018){
+      #Average over months of the year
+      yr_rast = raster::overlay(tmax[[which(sif_years == yr)]], fun=mean)
+      
+      #Weighted average of raster based on cropped area
+      tmp = yr_rast * cropped_area
+      annual_tmax = c(annual_tmax, sum(tmp[], na.rm=T) / sum(cropped_area[], na.rm=T))
+    }
+
+    #Soil moisture
+    sm = stack("data/ESA_SM_Morocco.grd")
+    annual_sm = c()
+    for(yr in 2007:2018){
+      #Average over months of the year
+      yr_rast = raster::overlay(sm[[which(sif_years == yr)]], fun=mean)
+      
+      #Weighted average of raster based on cropped area
+      tmp = yr_rast * cropped_area
+      annual_sm = c(annual_sm, sum(tmp[], na.rm=T) / sum(cropped_area[], na.rm=T))
+    }
+    ```
+
+3.  Run a regression to estimate the effect of tmax and sm on yield using FAO yield data. Detrend tmax and sm before including them in the regression.
+
+    ```{r}
+    mod_timeSeries_FAOYield = lm(d$yield_detrend ~ detrend(annual_tmax) + detrend(annual_sm))
+    ```
+
+4.  Run a regression to estimate the effect of tmax and sm on yield using predicted yield data. Detrend tmax and sm before including them in the regression.
+
+    ```{r}
+    mod_timeSeries_SIFYield = lm(d$yield_detrend_predSif ~ detrend(annual_tmax) + detrend(annual_sm))
+    ```
+
+5.  Create a table showing the results of these two models. Hint: you may use something like `stargazer(mod_timeSeries_FAOYield, mod_timeSeries_SIFYield, type = "text")`.
+
+    **Question**: How do the coefficients compare between the models using survey-based and satellite-based yield predictions? How do their model fits compare (in-sample is fine here, since the two models being compared have the same number of parameters)?
+
+```{r}
+stargazer(mod_timeSeries_FAOYield, mod_timeSeries_SIFYield, type = "text")
+```
+
+### 2.2 Cross-sectional model
+
+In the above analysis we used national temporal variation in SIF, yields, and weather to estimate relationships. We can also estimate the sensitivity of yields to soil moisture and temperature using spatial or "cross-sectional" variation. This cannot be done with yield observations directly because we don't measure the spatial variation of yields within Morocco. It can, however, be done with the SIF data.
+
+Cross-sectional regressions like this estimate how differences in climate (long-run weather) associate with differences in yield. Unlike year-to-year changes in weather, farmers can adapt to long-run changes in climate. So it's possible that sensitivities in a cross-sectional regression could be smaller than in a time-series regression. If so, this is evidence of adaptation (assuming there are not confounding variables). Long-run sensitivity to changes in climate is arguably more useful for understanding the impact of climate change, than short-run sensitivity, so it's exciting that remotely sensed measures enable us to estimate this.
+
+To conduct this regression, take the following steps:
+
+1.  Average the SIF, temperature and soil moisture raster data over time to get their climatology (a single average value for each grid cell for each variable).
+
+    ```{r}
+    sif_clim = overlay(sif, fun = mean)
+    tmax_clim = overlay(tmax, fun = mean)
+    sm_clim = overlay(sm, fun = mean)
+    ```
+
+2.  Predict yield across space using your trained model from part 1. Since it's a linear model, you can just multiply the SIF climatology by the coefficient on SIF from the model of yield \~ SIF (the `predict` function is not easy to use here).
+
+    ```{r}
+    yield_sif_clim = sif_clim * mod1$coefficients[2]
+    ```
+
+3.  Plot maps of predicted yield, temperature, soil moisture and cropped area. These don't have to be pretty or well-labeled. Just a quick visualization.
+
+    **Question**: What patters do you see in the spatial distribution of where wheat is planted in SIF, soil moisture and temperature? What climate conditions would you say are favorable to wheat production based on these maps?
+
+    ```{r}
+    plot(tmax_clim)
+    plot(sm_clim)
+    plot(yield_sif_clim)
+    plot(cropped_area > 0)
+    ```
+
+4.  We can analyze these spatial patterns using regression analysis. Estimate a cross-sectional regression of predicted yield on temperature and soil moisture, limiting the data to cropped areas.
+
+    To do this you will need to first mask the predicted yields, temperature, and soil moisture data using the cropped area data. Mask to where cropped area is greater than zero. Remember that you want to set yield and climate data to NA, not to zero using this mask. Second, you will need to convert the three rasters into a single data.frame. That can be done using something like: `df_clim = data.frame(yield_sif_clim[], tmax_clim[], sm_clim[])`. The `[]` get the values from the rasters. Third, you can estimate the model using `lm`.
+
+    ```{r}
+    #Make the mask
+    cropped_area_mask = cropped_area > 0
+    cropped_area_mask[cropped_area_mask == 0] = NA
+
+    #Mask SIF, tmax, sm raster stacks to cropped areas. 
+    yield_sif_clim = cropped_area_mask * yield_sif_clim
+    tmax_clim = cropped_area_mask * tmax_clim
+    sm_clim = cropped_area_mask * sm_clim
+
+    #Convert the rasters into a data frame for analysis
+    df_clim = data.frame(yield_sif_clim[], tmax_clim[], sm_clim[])
+    df_clim = df_clim[complete.cases(df_clim),]
+    colnames(df_clim) = c("yield_sif_clim", "tmax_clim", "sm_clim")
+
+    #Estimate the model
+    mod_cross_section = lm(data = df_clim, formula = yield_sif_clim ~ tmax_clim + sm_clim)
+    ```
+
+5.  Make a `stargazer` table showing the results of this model, alongside the time series model that used SIF-based yield predictions.
+
+    **Question**: How do these cross-sectional estimates compare to the time-series estimates previously estimated? Consider what this might suggest about the presence of either 1) adaptation or 2) potentially confounding variables in the analysis. Note: see here for a discussion and definition of confounding variables: <https://statisticsbyjim.com/regression/confounding-variables-bias/>
+
+    ```{r}
+    stargazer(mod_cross_section, mod_timeSeries_SIFYield, type = "text")
+    ```
+
+### 2.3 Panel model (!!! Optional !!!)
+
+A key advantage of SIF is it's fine resolution. To leverage both the spatial and temporal resolution of the SIF data, your final task is to estimate a panel regression of SIF on temperature and soil moisture at the pixel-by-year level in areas where wheat is grown. The benefit of a panel model here is that it identifies effects of weather variables on yield within-locations over time, by including an intercept (control) for each grid cell. This is the same as the national time-series model, which had a single intercept, but here we have a time-series for each pixel, so we may have much more power (i.e., observations) to identify the effects. The temperature term in the previous analysis was insignificant -- maybe this will provide the power to recover a significant effect.
+
+To do so take the following steps:
+
+1.  Mask the monthly SIF, tmax, and sm raster stacks to cropped areas and convert SIF to yield predictions using the coefficient from the model trained in part 1.
+
+    ```{r}
+    yield_sif_ca = sif * cropped_area_mask * mod1$coefficients[2]
+    tmax_ca = tmax * cropped_area_mask
+    sm_ca = sm * cropped_area_mask
+    ```
+
+2.  Average these to the annual level
+
+    ```{r}
+    for(yr in 2007:2018){
+      #Average over months of the year
+      yr_yield_sif = raster::overlay(yield_sif_ca[[which(sif_years == yr)]], fun=mean)
+      yr_tmax = raster::overlay(tmax_ca[[which(sif_years == yr)]], fun=mean)
+      yr_sm = raster::overlay(sm_ca[[which(sif_years == yr)]], fun=mean)
+      if(yr == 2007){
+        annual_stack_yield_sif = yr_yield_sif
+        annual_stack_tmax = yr_tmax
+        annual_stack_sm = yr_sm
+      } else {
+        annual_stack_yield_sif = stack(annual_stack_yield_sif, yr_yield_sif)
+        annual_stack_tmax = stack(annual_stack_tmax, yr_tmax)
+        annual_stack_sm = stack(annual_stack_sm,yr_sm)
+      }
+    }
+    ```
+
+3.  Regress SIF on temperature and soil moisture with a control for the location (pixel fixed effect) and a common linear time trend. To do this you will need to convert the raster stacks to a dataframe and then add columns to the dataframe indicating the pixel number and year of each pixel-by-year observation. To run the regression, you can use the `felm` function from the `lfe` package using a call like: `mod_panel = felm(data = df_annual_pix, formula = yield_sif ~ tmax + sm | pixID + year).`
+
+    ```{r}
+    #Make the dataframe
+    df_annual_pix = data.frame(c(annual_stack_yield_sif[]), c(annual_stack_tmax[]), c(annual_stack_sm[]))
+    df_annual_pix = df_annual_pix[complete.cases(df_annual_pix),]
+
+    #Add the identifiers
+    df_annual_pix$pixID = rep(1:77, 12)
+    df_annual_pix$year = rep(2007:2018, each = 77)
+
+    #Clean up the column names
+    colnames(df_annual_pix) = c("yield_sif","tmax","sm","pixID", "year")
+
+    #Run a regression of yield on tmax and sm, controlling for the pixelID and year
+    mod_panel = felm(data = df_annual_pix, formula = yield_sif ~ tmax + sm | pixID + year)
+
+
+    ```
+
+4.  Show the results in a stargazer table along with the cross-sectional and time-series regressions.
+
+    **Question**: How do these panel estimates differ from the estimates using the single aggregated time series and the spatial cross-section? Consider both the coefficient estimates and their uncertainties. What might cause these differences? If temperature increased by 2C and soil moisture decreased by 0.1 how would yields change?
+
+    ```{r}
+    stargazer(mod_panel, mod_cross_section, mod_timeSeries_SIFYield, type = "text")
+    ```
+
+## Congratulations!
+
+You finished the lab! Please list everyone you worked with on this assignment here:
+
+[TODO: list anyone you worked with]
