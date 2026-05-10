@@ -1,0 +1,441 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## FRE 490 Spatial Data Analysis and Remote Sensing
+
+##### Instructor: Jonathan Proctor
+
+##### Teaching Assistant: Bhavita Ragoo
+
+##### About this lab:
+
+-   Due date Thursday March 26th, 2025 at 9:30am.
+
+-   This is a longer lab, and worth 6 points instead of 3, but you have \~1.5 weeks to work on it. I recommend starting early. Please use me and Jeremy as a resource if you get stuck.
+
+-   You may talk with other students about the lab, but each student is responsible for doing all exercises in the lab themselves and turning in their own write up. We will be checking code for evidence of copying and pasting.
+
+-   This is a newly developed assignment, so if you think there is an error or something is unclear, please let us know right away. That will be extremely helpful to us and your fellow students.
+
+-   Submit your lab as both LASTNAME.html and LASTNAME.Rmd on canvas. Please re-run the entire notebook, as needed, prior to submitting to make sure the results show the output from the existing code.
+
+### Objectives:
+
+In this lab you will gain experience remotely sensing socio-economic variables using the MOSAIKS framework and Random Convolutional Features (RCF).
+
+### Setup
+
+Install and load necessary packages:
+
+```{r}
+rm(list = ls())
+library(maps)
+library(raster)
+library(ggplot2)
+library(ggthemes)
+library(sf)
+library(cowplot)
+```
+
+## 1. Predicting Human Development Globally Using High-Resolution Planet Imagery
+
+You have been asked by the United Nations Development Program (UNDP) to help them understand the spatial distribution of the Human Development Index (HDI). Instead of measuring the "success" of a country solely by its wealth, this index is holistic in that it considers additional aspects such as length of life and education. Since surveys are costly and time intensive, they want to know if satellite imagery can help predict HDI so that they can supplement future surveys.
+
+Your work is going to be based off of the MOSAIKS (Multi-task Observation using Satellite Imagery & Kitchen Sinks) pipeline that was proposed by Rolf et al. ([2021](https://www.nature.com/articles/s41467-021-24638-z)). Using the theory of random kitchen sinks by Rahimi and Recht ([2007](https://proceedings.neurips.cc/paper/2007/hash/013a006f03dbc5392effeb8f18fda755-Abstract.html), [2008](https://proceedings.neurips.cc/paper_files/paper/2008/hash/0efe32849d230d7f53049ddc4a4b0c60-Abstract.html)), the team extracted random convolutional features (RCF) from satellite imagery. These features are created by taking a sample of images, taking a random sample of patches from these images, and then convolving the patches over a cross-section of global Planet imagery. This extracts information in the same way that we discussed in our demo on image texture in class. The RCF can be used as the predictors (X) in a regression to predict a wide range of outcomes (y) on a global map. Some outcomes will, of course, be predicted better than others. The RCF data and its application to predicting HDI is further discussed [here](https://www.nature.com/articles/s41467-026-68805-6).
+
+You will be using a version of these RCF features that have been aggregated to administrative boundary polygons. These will then be merged with data for a set of outcomes, which will be the y in your prediction. With these combined, you'll run a ridge regression to learn the association between the information in the imagery (the RCF) and the outcome of interest (y). You'll then evaluate the model to see how well the image features can predict the outcome.
+
+Let's walk through this process step-by-step.
+
+1.  Load and merge the data provided in `data/HDI_adm1.csv` with the GDL shapefile in `data/GDL_Shapefile_V4_Simplified/GDL_Shapefile.shp`. You can merge the data using the columns `unique_polygon_id` and `GDLcode`. Plot a map colored by HDI (`Sub.national.HDI`) --- I recommend using ggplot and the function `geom_sf` for this. See the `merge` function for details.
+
+```{r}
+### [TODO YOUR CODE HERE]
+
+HDI = read.csv("data/HDI_adm1.csv")
+GDL = st_read("data/GDL_Shapefile_V4_Simplified/GDL_Shapefile.shp")
+
+GDL_HDI = merge(HDI,GDL,by.x = "unique_polygon_id",by.y = "GDLcode")
+
+plot1 = ggplot(GDL_HDI$geometry)+
+  geom_sf(aes(fill = GDL_HDI$Sub.national.HDI))+
+  scale_fill_viridis_c(name = "HDI",na.value = "grey90")
+
+plot1
+
+```
+
+**TODO:** Describe any observations about spatial patterns and overall values.
+
+The global north has very high HDI values, while the global south especially in Africa has lower values. This might correlate to overall GDP and way of life in the countries.
+
+2.  Merge the combined shapefile and HDI data from step 1 with the MOSAIKS RCF features, which are calculated using \~5m Planet imagery and then aggregated to administrative unit level 1 (ADM1) polygons, which are roughly equivalent to U.S. states and Canadian provinces. The aggregation was done by averaging RCF feature values weighting by population. You can find more information about the features [here](https://www.mosaiks.org/). Choose 3 of the 4000 RCF and make maps of their values. I recommend using `ggplot` and the function `geom_sf` for this; you can also use `plot_grid` to stitch the plots together vertically and the `align = "v"` option to make it look nice.
+
+```{r}
+### [TODO YOUR CODE HERE]
+
+rcf = read.csv("data/RCF_GDL_ADM1/GDL_ADM1_polygon_X_creation_pop_weight=True.csv")
+
+rcf_GDL_HDI = merge(GDL_HDI,rcf,by.x = "unique_polygon_id",by.y = "GDLCODE")
+
+rcf_vars = c(rcf[,3],rcf[,4],rcf[,5])
+
+p1 = ggplot(rcf_GDL_HDI$geometry) +
+  geom_sf(aes(fill = rcf_GDL_HDI[,22]))+ 
+  scale_fill_viridis_c(name = "HDI",na.value = "grey90")
+p2 = ggplot(rcf_GDL_HDI$geometry) +
+  geom_sf(aes(fill = rcf_GDL_HDI[,23]))+ 
+  scale_fill_viridis_c(name = "HDI",na.value = "grey90")
+p3 = ggplot(rcf_GDL_HDI$geometry) +
+  geom_sf(aes(fill = rcf_GDL_HDI[,24]))+ 
+  scale_fill_viridis_c(name = "HDI",na.value = "grey90")
+
+plot_grid(p1, p2, p3,align = "v")
+
+
+```
+
+**Question:** Do the features have different information across space? Are any of the three feature values interpretable to you (Google Maps satellite view might be useful here)?
+
+Yes, these features have different information across space for example, RCFs capture urbanization and built infrastructure; reflect vegetation patterns, agriculture, or climate. Some of the values are interpretable as there are high values in major metropolitan regions and low values in sparsely populated areas.
+
+4.  Create a random train-test split, allocating 20% of your data to the test set.
+
+    Create variables `X_train` and `X_test`, which are the RCF features for your train and test datasets, as well as `y_train` and `y_test`, which are the label values for your train and test datasets.
+
+    **Hint**: throughout the rest of this problem, some analyses (e.g., solving the ridge regression) can be time consuming to run. I highly recommend subsetting your data while writing and testing your code, so that the code runs quickly while you're debugging it. Then you can run the code with the full data just once after you know it all works. For example, I prepared this assignment using only 50 features so that the regressions ran in a second or two. Then I ran it with the full 4000 features once at the end. If you have computational limitations and find that your code takes a long time to run with the full 4000 features even once, feel free to turn in the assignment running the code with 500, 1000 or 2000 features instead --- performance will be slightly diminished, but similar. Please say how many features you used.
+
+```{r}
+### TODO YOUR CODE HERE
+
+# 50 features
+X = as.matrix(rcf_GDL_HDI[1:50, 22:50])
+X = apply(X, 2, as.numeric)
+y = as.numeric(rcf_GDL_HDI[1:50, 11])
+
+#Remove zero-variance features
+keep_cols = apply(X, 2, var) > 0
+X = X[, keep_cols]
+
+set.seed(123)
+
+n = nrow(X)
+test_idx = sample(seq_len(n), size = floor(0.20 * n))
+X_train = X[-test_idx, ]
+X_test = X[ test_idx, ]
+y_train = y[-test_idx]
+y_test = y[ test_idx]
+
+```
+
+5.  Write a ridge regression function that intakes a matrix of features (X), a vector of labels (y), and a ridge penalty factor (lambda) and outputs ridge coefficients. Note that in this instance you do *not* need to standardize your features because they are all coming from the same process and thus have the same units to start with. You're welcome to standardize them if you like though. I've started the function for you below:
+
+    ```{r}
+    ridge_regression = function(X, y, lambda) {
+      # X is the matrix of input features, with observations in rows and features in columns
+      # y is the vector of target variable
+      # lambda is the regularization parameter
+      
+      # Adding a column of ones for the intercept term
+      X_intercept = as.matrix(cbind(1, X))
+      
+      # Compute the Ridge Regression coefficients
+      # Beta = (X'X + lambda*I)^(-1) X'y
+      # I is the identity matrix of the appropriate size, lambda is the regularization parameter
+      
+      n = ncol(X_intercept) # Number of columns/features including intercept
+      I = diag(n) # Identity matrix
+      lambda_I = lambda * I
+      lambda_I[1, 1] = 0 # Excluding the intercept from regularization
+      
+      ### TODO YOUR CODE HERE:
+      # Once you are comfortable that you understand the function and what the below line does
+      # uncomment it and the function is complete. 
+      beta = solve(t(X_intercept) %*% X_intercept + lambda_I) %*% t(X_intercept) %*% y
+      
+      return(beta)
+    }
+    ```
+
+6.  Run a ridge regression using the training data. When doing so, choose a value of lambda that feels reasonable to you for now (we'll optimize it later; I initially used the value of 1.0). Then, using this model, make predictions (multiply estimated coefficients by the features) for the training set and for the test set.
+
+```{r}
+### TODO YOUR CODE HERE:
+ridge_train = ridge_regression(X_train, y_train, 1.0)
+X_train_intercept = cbind(1, X_train)
+X_test_intercept = cbind(1, X_test)
+y_train_pred = as.vector(X_train_intercept %*% ridge_train)
+y_test_pred = as.vector(X_test_intercept %*% ridge_train)
+```
+
+7.  We'll evaluate these predictions using R2. To facilitate this, write a function to calculate R2, the coefficient of determination, given predicted values and true values. Use the equation from class, also here: <https://en.wikipedia.org/wiki/Coefficient_of_determination>.
+
+    ```{r}
+    ### TODO YOUR CODE HERE:
+
+    r2_score = function(y_true, y_pred) {
+      
+      ss_res = sum((y_true - y_pred)^2)          # Residual sum of squares
+      ss_tot = sum((y_true - mean(y_true))^2)    # Total sum of squares
+      
+      r2 = 1 - (ss_res / ss_tot)
+      return(r2)}
+
+    r2_train = r2_score(y_train, y_train_pred)
+    r2_test = r2_score(y_test,  y_test_pred)
+
+    ```
+
+8.  Evaluate both the in-sample (training set) and out-of-sample (test set) performance of your ridge regression model. Make a scatter plot of the true values (y-axis) against the predicted values (x-axis) for both sets of data. Title the in-sample and out-of-sample graphs and include the R2 value for each in the respective title. Add a 45 degree line to each plot.
+
+```{r}
+### TODO YOUR CODE HERE:
+
+train_df = data.frame(y_true = y_train,y_pred = y_train_pred)
+
+test_df = data.frame(y_true = y_test,y_pred = y_test_pred)
+
+p_train = ggplot(train_df, aes(x = y_pred, y = y_true)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = paste0(
+      "In-sample Performance\n",
+      "R² = ", round(r2_train, 3)),
+    x = "Predicted HDI",
+    y = "Observed HDI")
+
+p_test = ggplot(test_df, aes(x = y_pred, y = y_true)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = paste0(
+      "Out-of-sample Performance\n",
+      "R² = ", round(r2_test, 3)),
+    x = "Predicted HDI",
+    y = "Observed HDI")
+
+plot_grid(p_train,p_test,ncol = 2,align = "h")
+```
+
+**Question:** how does your model perform? Is performance different in-sample vs. out-of-sample? In what range of the data do you tend to over- or under-predict? How might you make your model perform better?
+
+Overall, the ridge regression model predicts HDI moderately well. Model performance is better in-sample than out-of-sample. Low-HDI regions tend to be over-predicted while high-HDI regions tend to be under-predicted. Ways that we could improve our model is incorporating more features computed at multiple spatial scales to capture more variation related to development.
+
+Now, let's try to optimize the ridge regression model by using the training dataset to tune lambda. To do so, first write a function called `getCrossValidationR2_ridge` that intakes the features (X), the outcome (y), and lambda and outputs k-fold cross-validation performance (R2) for a ridge model trained using that lambda. Calculate the R2 once using the out of sample predictions from all folds. I used k=5.
+
+```{r}
+### TODO YOUR CODE HERE 
+
+getCrossValidationR2_ridge = function(X, y, lambda) {
+  
+  n = nrow(X)
+  # create fold assigments
+  set.seed(123)
+  folds = sample(rep(1:5, length.out = n))
+  # store out of sample predictions
+  y_pred_cv = rep(NA, n)
+  
+  for (fold in 1:5) {
+    # split data
+    test_idx  = which(folds == fold)
+    train_idx = which(folds != fold)
+    X_train = X[train_idx, ]
+    y_train = y[train_idx]
+    X_test = X[test_idx, ]
+    # ridge
+    beta_hat = ridge_regression(X_train, y_train, lambda)
+    # predict held out fold 
+    X_test_i = cbind(1, X_test)
+    y_pred_cv[test_idx] = as.vector(X_test_i %*% beta_hat)}
+  # compute r2 using predicitons
+  r2_cv = r2_score(y, y_pred_cv)
+  
+  return(r2_cv)}
+
+cv_r2_lambda1 = getCrossValidationR2_ridge(
+  X = X_train,
+  y = y_train,
+  lambda = 1.0)
+
+cv_r2_lambda1
+
+```
+
+10. Then using this function, calculate the expected out-of-sample R2 using cross-validation in the training dataset for a range of lambdas (`lambdas = c(0.000001, 0.00001,0.0001,0.001, 0.01, 0.1, 1, 10)`). Plot the cross-validation R2 against the log of lambda and include the optimal lambda in the title. Also create a separate plot of the size (euclidean length) of the coefficient vector against the log of lambda (you can report the average of the beta lengths across the five folds, for each lambda). You may want to update your cross-validation function to output not just R2, but instead a `list` that contains the R2 and the average length (i.e., `sqrt(sum(beta[-1]^2))`) of the coefficient vector. Do not include the coefficient for the intercept when calculating length, since it is not penalized and thus won't change based on lambda.
+
+```{r}
+### TODO YOUR CODE HERE
+getCrossValidationR2_ridge = function(X, y, lambda) {
+
+  n = nrow(X)
+  set.seed(123)
+  folds = sample(rep(1:5, length.out = n))
+  
+  y_pred_cv = rep(NA, n)
+  beta_lengths = 5
+  
+  for (fold in 1:5) {
+    # split data
+    test_idx  = which(folds == fold)
+    train_idx = which(folds != fold)
+    X_train = X[train_idx, ]
+    y_train = y[train_idx]
+    X_test = X[test_idx, ]
+    # ridge model
+    beta_hat = ridge_regression(X_train, y_train, lambda)
+    # prediction for this fold
+    y_pred_cv[test_idx] = as.vector(cbind(1, X_test) %*% beta_hat)
+    # coefficent length
+    beta_lengths[fold] = sqrt(sum(beta_hat[-1]^2))}
+  
+  r2_cv = r2_score(y, y_pred_cv)
+  avg_beta_length = mean(beta_lengths)
+  # list output
+  return(list(r2 = r2_cv,beta_length = avg_beta_length))}
+
+lambdas = c(0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10)
+
+cv_results = lapply(lambdas, function(l) {
+  res = getCrossValidationR2_ridge(X_train, y_train, lambda = l)
+  data.frame(
+    lambda = l,
+    log_lambda = log(l),
+    r2 = res$r2,
+    beta_length = res$beta_length)})
+
+cv_df = do.call(rbind, cv_results)
+
+best_lambda = cv_df$lambda[which.max(cv_df$r2)]
+
+ggplot(cv_df, aes(x = log_lambda, y = r2)) +
+  geom_line() +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(
+    title = paste0(
+      "Cross-Validated R²\n",
+      "Optimal lambda = ", best_lambda),
+    x = "log(lambda)",
+    y = "Cross-validated R²")
+
+ggplot(cv_df, aes(x = log_lambda, y = beta_length)) +
+  geom_line() +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(
+    title = "Vector Length",
+    x = "log(lambda)",
+    y = "Euclidean length")
+
+
+```
+
+**Questions:** how does out-of-sample R2 change as lambda increases? Why? How does the length of beta change as lambda increases? Why?
+
+When lambda is very small, out-of-sample R2 is low. There is thousands of correlated features, leading to overfitting and poor generalization. When lambda is near the middle, R2 reaches a maximum. Very large lambda, the R2 value decreases again because the penalty is too strong and there is underfitting. When there is small lambda the length of beta is long but when the lambda is large the length of beta is short. This happens because ridge regression explicitly penalizes large coefficients. This is why the peak out-of-sample R2 usually occurs at an intermediate beta length, not at the extremes.
+
+Train a ridge model on the full training dataset using your optimal lambda discovered through cross-validation. As above, evaluate both the in-sample (training set) and out-of-sample (test set) performance of your ridge regression model. Plot the true values (y-axis) against the predicted values (x-axis) for both sets of data. Title the in-sample and out-of-sample graphs and include the R2 value for each in the respective title. Add a 45 degree line to each plot.
+
+11. 
+
+    ```{r}
+    ### TODO YOUR CODE HERE
+
+    opt_lambda = ridge_regression(X_train, y_train, best_lambda)
+
+    y_train_pred_ol = as.vector(X_train_intercept %*% opt_lambda)
+    y_test_pred_ol = as.vector(X_test_intercept %*% opt_lambda)
+    r2_train_ol = r2_score(y_train, y_train_pred_ol)
+    r2_test_ol = r2_score(y_test,  y_test_pred_ol)
+
+    train_df_ol = data.frame(y_true = y_train,y_pred = y_train_pred_ol)
+    test_df_ol = data.frame(y_true = y_test,y_pred = y_test_pred_ol)
+
+    p_train = ggplot(train_df_ol, aes(x = y_pred, y = y_true)) +
+      geom_point(alpha = 0.4, size = 1) +
+      geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+      theme_minimal() +
+      labs(title = paste0(
+          "In-sample Performance\n",
+          "R² = ", round(r2_train_ol, 3)),
+        x = "Predicted HDI",
+        y = "Observed HDI")
+
+    p_test = ggplot(test_df_ol, aes(x = y_pred, y = y_true)) +
+      geom_point(alpha = 0.4, size = 1) +
+      geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+      theme_minimal() +
+      labs(title = paste0(
+          "Out-of-sample Performance\n",
+          "R² = ", round(r2_test_ol, 3)),
+        x = "Predicted HDI",
+        y = "Observed HDI")
+
+    plot_grid(p_train,p_test,ncol = 2,align = "h")
+    ```
+
+12. Create three maps: one of observed HDI values (same as question 1), one of predictions, and one of residuals (the difference between the predicted value and the observed value). Use `plot_grid` to stack the maps vertically so you can easily compare them.
+
+```{r}
+### TODO YOUR CODE HERE
+
+# 4000 features
+X_full = as.matrix(rcf_GDL_HDI[, 22:ncol(rcf_GDL_HDI)])
+X_full = apply(X_full, 2, as.numeric)
+y_full = as.numeric(rcf_GDL_HDI[, 11])
+# remove rows with missing values
+keep_rows = complete.cases(X_full, y_full)
+X_full = X_full[keep_rows, , drop = FALSE]
+y_full = y_full[keep_rows]
+# remove zero variance features
+keep_cols1 = apply(X_full, 2, var) > 0
+X_full = X_full[, keep_cols1, drop = FALSE]
+# identify rows with complete data
+complete_rows = complete.cases(X_full, y_full)
+X_model = X_full[complete_rows, , drop = FALSE]
+y_model = y_full[complete_rows]
+
+beta_final = ridge_regression(X_model, y_model, best_lambda)
+
+X_model_int = cbind(1, X_model)
+hdi_pred_model = as.vector(X_model_int %*% beta_final)
+hdi_resid_model = hdi_pred_model - y_model
+
+# predicition vectors
+hdi_pred_all = rep(NA, nrow(rcf_GDL_HDI))
+hdi_resid_all = rep(NA, nrow(rcf_GDL_HDI))
+hdi_pred_all[complete_rows]  = hdi_pred_model
+hdi_resid_all[complete_rows] = hdi_resid_model
+
+
+p_pred = ggplot(rcf_GDL_HDI$geometry) +
+  geom_sf(aes(fill = hdi_pred_all), color = NA) +
+  scale_fill_viridis_c(option = "viridis", name = "Predicted HDI") +
+  theme_minimal()
+
+p_resid = ggplot(rcf_GDL_HDI$geometry) +
+  geom_sf(aes(fill = hdi_resid_all), color = NA) +
+  scale_fill_viridis_c(option = "viridis", name = "Residual") +
+  theme_minimal()
+
+plot_grid(plot1,p_pred,p_resid,ncol = 1,align = "v")
+```
+
+**Question:** What do you learn from these maps? What places in the world do you tend to over- or under-predict? What does this imply for using these predictions for policy making? Overall, how do RCF visual satellite image features work for predicting human development? What other information might you include in the model?
+
+Comparing the observed and predicted HDI maps shows that the ridge regression using RCF satellite image features captures broad, large-scale spatial patterns in human development reasonably well. High HDI regions are generally predicted to have higher values, while lower HDI regions are predicted to have lower values. Over-prediction tends to occur in parts of the world where the built environment appears relatively developed from above, but human development outcomes lag behind. Under-prediction is common amongst cities with low infrastructure but wealthy capacity. This implies that these prediction shouldn't be used for policy making as over-predicted regions could lead to under-allocation of resources. Some additional information that I would include would be population density as it would allow us to see where people are centered around.
+
+(**!!!Optional!!!**). Pick another variable other than HDI that you want to predict out of the variables in the `HDI_adm1.csv` data. There are measures of life expectancy, GNI per capita, expected years schooling, mean years schooling, health index, income index, and educational index. Repeat model training and evaluation with this variable.
+
+```{r}
+### TODO YOUR CODE HERE
+```
+
+## Congratulations!
+
+You finished the lab! Please list everyone you worked with on this assignment here:
+
+[TODO: list anyone you worked with]
